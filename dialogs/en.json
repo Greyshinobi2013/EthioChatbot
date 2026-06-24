@@ -1,0 +1,14 @@
+{
+  "hello": "Hello! How can I help you today?",
+  "hi": "Hi there! Nice to meet you.",
+  "how are you": "I am doing great, thank you! I hope you are having a wonderful day.",
+  "name": "My name is EthioChatbot. I am your multilingual assistant.",
+  "help": "I can help you by answering questions, switching languages, and recognizing your face. What do you need help with?",
+  "weather": "I don't have real-time weather information right now, but I hope it is pleasant where you are!",
+  "bye": "Goodbye! Have a wonderful day!",
+  "thank you": "You're very welcome! Let me know if you need anything else.",
+  "thanks": "Anytime! Happy to help.",
+  "amharic": "You can switch to Amharic by saying 'ሰላም' (Selam)!",
+  "oromifa": "You can switch to Oromifa by saying 'Akkam'!",
+  "arabic": "You can switch to Arabic by saying 'مرحبا' (Marhaba)!"
+}
