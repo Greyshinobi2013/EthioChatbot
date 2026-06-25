@@ -121,15 +121,16 @@ For each language, queries are matched against keys inside `dialogs/*.json`. Try
 
 ### 5. Multilingual Speech Interface (STT and TTS)
 * **STT**: Click **🎙️ Voice Input (Listen)**. Speak a phrase (e.g., *"How are you"* or Amharic *"እንዴት ነህ"* if Amharic mode is selected). The chatbot captures your speech using the microphone, transcribes it through the Google API using the correct language-locale, processes it through the rules engine, and responds!
-* **TTS (Offline)**: English and Arabic responses are spoken offline via `pyttsx3`.
-* **TTS (Online API Integration)**:
-  - If you switch to **Amharic** or **Oromifa**, the system provides standard hooks for the `EthiopicAI` and `Nimo Labs` TTS platforms.
-  - To hook up real API keys, set your keys as environment variables:
+* **TTS (Natural Voices)**: English, Amharic, and Arabic responses are spoken using free, natural-sounding neural voices via `edge-tts` (Microsoft's online TTS service — no API key required, just an internet connection). This replaces the robotic offline voice for these three languages whenever you're online.
+* **TTS (Offline Fallback)**: If there's no internet connection (or `edge-tts` isn't installed), English and Arabic automatically fall back to the offline robotic voice via `pyttsx3`.
+* **TTS (Online API Integration for Oromifa)**:
+  - `edge-tts` doesn't currently offer an Oromifa voice, so Oromifa keeps using the `Nimo Labs` API hook for natural speech.
+  - To hook up a real key, set it as an environment variable:
     ```bash
-    export ETHIOPIC_AI_API_KEY="your-real-key"
     export NIMO_LABS_API_KEY="your-real-key"
     ```
-  - When active, the chatbot automatically sends a POST request, downloads the synthesized natural Amharic/Oromifa `.mp3` voice, plays it locally, and generates a neat, interactive play audio widget inside the chat window so you can play it directly inside your browser!
+  - You can also still set `ETHIOPIC_AI_API_KEY` as an alternate/backup Amharic voice provider, though `edge-tts` will be tried first.
+  - When an online provider is active, the chatbot automatically sends a POST request, downloads the synthesized `.mp3` voice, plays it locally, and generates a neat, interactive play audio widget inside the chat window so you can play it directly inside your browser!
 
 ---
 

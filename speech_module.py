@@ -1,6 +1,7 @@
 import os
 import logging
 import tempfile
+import asyncio
 import requests
 import config
 
@@ -24,6 +25,18 @@ try:
 except ImportError:
     TTS_AVAILABLE = False
     logger.warning("Could not import 'pyttsx3'. Offline TTS will be disabled.")
+
+# Try to import edge-tts (free, natural-sounding neural voices, no API key required)
+try:
+    import edge_tts
+    EDGE_TTS_AVAILABLE = True
+    logger.info("Successfully imported edge_tts. Natural neural voices enabled.")
+except ImportError:
+    EDGE_TTS_AVAILABLE = False
+    logger.warning(
+        "Could not import 'edge_tts'. Natural-sounding voices will be disabled; "
+        "falling back to offline robotic TTS. Run 'pip install edge-tts' to enable."
+    )
 
 
 class STTHandler:
@@ -159,6 +172,60 @@ class TTSHandler:
         except Exception as e:
             logger.error(f"Error during offline TTS: {e}")
 
+    def _play_audio_file(self, audio_path):
+        """Plays an audio file locally using whichever system player is available.
+
+        Args:
+            audio_path (str): Path to the audio file (mp3) to play.
+        """
+        if not audio_path:
+            return
+        try:
+            import subprocess
+            if os.name == 'posix':  # Linux/macOS
+                for player in ['aplay', 'paplay', 'mpg123', 'cvlc', 'play', 'ffplay']:
+                    if subprocess.run(['which', player], capture_output=True).returncode == 0:
+                        extra_args = ['-nodisp', '-autoexit'] if player == 'ffplay' else []
+                        subprocess.Popen([player, *extra_args, audio_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        break
+            elif os.name == 'nt':  # Windows
+                os.startfile(audio_path)
+        except Exception as e:
+            logger.error(f"Error playing audio file locally: {e}")
+
+    def speak_edge_tts(self, text, lang_code):
+        """Synthesizes natural-sounding speech using Microsoft Edge's free neural TTS service.
+
+        Args:
+            text (str): Text to speak.
+            lang_code (str): Language code ('en', 'am', 'ar'). Oromifa ('om') is not
+                              currently supported by this service.
+
+        Returns:
+            str: Path to the generated MP3 audio file, or None if unavailable/failed.
+        """
+        if not EDGE_TTS_AVAILABLE:
+            return None
+
+        voice = config.EDGE_TTS_VOICES.get(lang_code)
+        if not voice:
+            logger.info(f"No edge-tts neural voice configured for language '{lang_code}'.")
+            return None
+
+        temp_file = os.path.join(self.temp_dir, f"edge_tts_{lang_code}_{hash(text)}.mp3")
+
+        try:
+            async def _synthesize():
+                communicate = edge_tts.Communicate(text, voice)
+                await communicate.save(temp_file)
+
+            asyncio.run(_synthesize())
+            logger.info(f"Synthesized natural '{lang_code}' voice via edge-tts ({voice}) -> {temp_file}")
+            return temp_file
+        except Exception as e:
+            logger.error(f"Edge TTS synthesis failed for '{lang_code}' (check internet connection): {e}")
+            return None
+
     def speak_amharic_api(self, text):
         """Integration hook for EthiopicAI API to generate natural Amharic voices.
         
@@ -245,54 +312,49 @@ class TTSHandler:
 
     def speak_output(self, text, lang_code="en", play_local=True):
         """Speaks the response based on the active language.
-        
+
+        Voice priority per language:
+          1. edge-tts natural neural voice (en, am, ar) — free, no API key, sounds human.
+          2. Online API hooks (EthiopicAI for am, Nimo Labs for om) — used if edge-tts
+             is unavailable (e.g. no internet) or for om, which edge-tts doesn't support.
+          3. Offline pyttsx3 robotic voice — final fallback so something is always spoken.
+
         Args:
             text (str): Response text to be spoken.
             lang_code (str): Language code ('en', 'am', 'om', 'ar').
-            play_local (bool): Whether to play audio locally on the host machine using pyttsx3/system players.
-            
+            play_local (bool): Whether to play audio locally on the host machine.
+
         Returns:
-            str: Path to synthesized MP3 audio file if online API was used, or None.
+            str: Path to synthesized MP3 audio file if an online voice was used, or None.
         """
         if not text:
             return None
 
-        # Offline TTS supports English and Arabic
-        if lang_code in ["en", "ar"]:
-            if play_local:
-                self.speak_offline(text, lang_code)
-            return None
-            
-        # Online TTS API hooks for Ethiopic languages
-        elif lang_code == "am":
+        # 1. Try the natural-sounding neural voice first (en, am, ar)
+        if lang_code in config.EDGE_TTS_VOICES:
+            audio_path = self.speak_edge_tts(text, lang_code)
+            if audio_path:
+                if play_local:
+                    self._play_audio_file(audio_path)
+                return audio_path
+            logger.warning(f"Natural voice unavailable for '{lang_code}', falling back.")
+
+        # 2. Online TTS API hooks for Ethiopic languages (also covers 'am' if edge-tts failed)
+        if lang_code == "am":
             audio_path = self.speak_amharic_api(text)
-            if audio_path and play_local:
-                # Play the generated audio file locally (could use standard platform tools)
-                try:
-                    import subprocess
-                    # Simple cross-platform play command check
-                    if os.name == 'posix': # Linux/macOS
-                        # Check which player is available
-                        for player in ['aplay', 'paplay', 'mpg123', 'cvlc', 'play']:
-                            if subprocess.run(['which', player], capture_output=True).returncode == 0:
-                                subprocess.Popen([player, audio_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                                break
-                except Exception as e:
-                    logger.error(f"Error playing audio file locally: {e}")
-            return audio_path
-            
+            if audio_path:
+                if play_local:
+                    self._play_audio_file(audio_path)
+                return audio_path
+
         elif lang_code == "om":
             audio_path = self.speak_oromifa_api(text)
-            if audio_path and play_local:
-                try:
-                    import subprocess
-                    if os.name == 'posix':
-                        for player in ['aplay', 'paplay', 'mpg123', 'cvlc', 'play']:
-                            if subprocess.run(['which', player], capture_output=True).returncode == 0:
-                                subprocess.Popen([player, audio_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                                break
-                except Exception as e:
-                    logger.error(f"Error playing audio file locally: {e}")
-            return audio_path
-            
+            if audio_path:
+                if play_local:
+                    self._play_audio_file(audio_path)
+                return audio_path
+
+        # 3. Final fallback: offline robotic TTS (en/ar handled here too if edge-tts failed)
+        if play_local:
+            self.speak_offline(text, lang_code)
         return None

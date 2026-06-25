@@ -55,5 +55,15 @@ NIMO_LABS_API_KEY = os.getenv("NIMO_LABS_API_KEY", "your_nimo_labs_api_key_here"
 NIMO_LABS_TTS_URL = os.getenv("NIMO_LABS_TTS_URL", "https://api.nimolabs.com/v1/tts")
 
 # Voice engine configuration
-OFFLINE_TTS_RATE = 150  # Words per minute
-OFFLINE_TTS_VOLUME = 1.0
+OFFLINE_TTS_RATE = 200  # Words per minute
+OFFLINE_TTS_VOLUME = 5.0
+
+# Natural-sounding neural voices via edge-tts (Microsoft Edge's online TTS service).
+# Free, no API key required. Used as the preferred voice for these languages.
+# NOTE: Oromifa (om) has no neural voice available from this service yet,
+# so it intentionally falls back to the EthiopicAI/Nimo Labs hooks or offline TTS.
+EDGE_TTS_VOICES = {
+    "en": "en-US-AriaNeural",
+    "am": "am-ET-MekdesNeural",
+    "ar": "ar-SA-ZariyahNeural",
+}
