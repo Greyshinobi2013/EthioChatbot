@@ -1,13 +1,20 @@
-fastapi
-uvicorn
-streamlit
-opencv-python-headless
-face_recognition
-vosk
-pyttsx3
-numpy
-pandas
-requests
-python-multipart
-# For GPU support (Desktop)
-# dlib should be compiled with CUDA
+# Core UI
+streamlit>=1.35
+
+# Computer vision / face recognition
+opencv-python>=4.9
+dlib>=19.24
+numpy>=1.26
+
+# Speech recognition (offline)
+openai-whisper>=20231117
+sounddevice>=0.4.6
+
+# Voice activity detection (used for fast interruption / barge-in detection)
+webrtcvad>=2.0.10
+
+# Audio playback
+pygame>=2.5
+
+# Whisper's dependency, pinned loosely for compatibility
+torch>=2.1

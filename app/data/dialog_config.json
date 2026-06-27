@@ -1,0 +1,75 @@
+{
+  "languages": {
+    "en": {
+      "name": "English",
+      "wake_words": [
+        "hello, bot"
+      ],
+      "default_greeting": "audio/en/greeting_default.wav"
+    },
+    "am": {
+      "name": "Amharic",
+      "wake_words": [
+        "selam",
+        "salam"
+      ],
+      "wake_words_native": [
+        "ሰላም"
+      ],
+      "default_greeting": "audio/am/greeting_default.wav"
+    }
+  },
+  "user_greetings": {
+    "_comment": "Maps an enrolled user_id to a per-language greeting clip played on face-recognition.",
+    "default": {
+      "en": "audio/en/greeting_default.wav",
+      "am": "audio/am/greeting_default.wav"
+    }
+  },
+  "_scenarios_comment": "Each scenario is a linear or branching set of dialog steps. 'next' is the default next step id; null ends the scenario. interruptible controls whether VAD-based barge-in is allowed on that step.",
+  "scenarios": {
+    "welcome": {
+      "description": "First scenario triggered right after wake-word activation.",
+      "steps": {
+        "start": {
+          "en": "audio/en/welcome_start.wav",
+          "am": "audio/am/welcome_start.wav",
+          "interruptible": true,
+          "next": "menu"
+        },
+        "menu": {
+          "en": "audio/en/welcome_menu.wav",
+          "am": "audio/am/welcome_menu.wav",
+          "interruptible": true,
+          "next": null
+        }
+      },
+      "entry_step": "start"
+    },
+    "faq_hours": {
+      "description": "Example scenario: answer a frequently asked question about opening hours.",
+      "steps": {
+        "start": {
+          "en": "audio/en/faq_hours.wav",
+          "am": "audio/am/faq_hours.wav",
+          "interruptible": true,
+          "next": null
+        }
+      },
+      "entry_step": "start"
+    },
+    "goodbye": {
+      "description": "Closing scenario.",
+      "steps": {
+        "start": {
+          "en": "audio/en/goodbye.wav",
+          "am": "audio/am/goodbye.wav",
+          "interruptible": false,
+          "next": null
+        }
+      },
+      "entry_step": "start"
+    }
+  },
+  "default_scenario": "welcome"
+}
