@@ -1,0 +1,6 @@
+{
+    "recognition_threshold": 0.5,
+    "vad_aggressiveness": 1,
+    "whisper_model": "base",
+    "gpu_enabled": false
+}

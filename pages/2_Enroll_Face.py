@@ -1,31 +1,55 @@
 import streamlit as st
-import cv2
-import numpy as np
-from PIL import Image
-from utils.face_recognition import add_face
+from pathlib import Path
 
-st.title("👤 Enroll Face")
+FACES_DIR = Path("faces")
+FACES_DIR.mkdir(exist_ok=True)
 
-name = st.text_input("Enter Name")
+st.title("📷 Enroll Face")
 
-if st.button("Capture"):
-    cap = cv2.VideoCapture(0)
-    ret, frame = cap.read()
-    cap.release()
+if "logs" not in st.session_state:
+    st.session_state.logs = []
 
-    if ret:
-        if add_face(frame, name):
-            st.success("Saved ✅")
-        else:
-            st.error("No face detected")
 
-uploaded = st.file_uploader("Upload Image")
+def add_log(message):
+    st.session_state.logs.insert(0, message)
 
-if uploaded:
-    img = Image.open(uploaded)
-    arr = np.array(img)
 
-    if add_face(arr, name):
-        st.success("Saved ✅")
+user_name = st.text_input(
+    "User Name / ID"
+)
+
+uploaded_file = st.file_uploader(
+    "Upload Face Image",
+    type=["jpg", "jpeg", "png"]
+)
+
+if uploaded_file:
+    st.image(uploaded_file, width=300)
+
+if st.button("Save Enrollment"):
+
+    if not user_name:
+        st.warning("Please enter a user ID.")
+
+    elif uploaded_file is None:
+        st.warning("Please upload an image.")
+
     else:
-        st.error("No face found")
+
+        destination = (
+            FACES_DIR /
+            f"{user_name}.jpg"
+        )
+
+        with open(destination, "wb") as file:
+            file.write(
+                uploaded_file.read()
+            )
+
+        add_log(
+            f"Face enrolled: {user_name}"
+        )
+
+        st.success(
+            f"{user_name} enrolled successfully."
+        )

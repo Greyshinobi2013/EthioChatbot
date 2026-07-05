@@ -1,53 +1,180 @@
-import face_recognition
-import pickle
 import os
+import cv2
+import dlib
+import numpy as np
+import pickle
 
-DB = "faces/encodings.pkl"
+# =====================================================
+# Dlib Models
+# =====================================================
 
-def load_db():
-    if os.path.exists(DB):
-        with open(DB, "rb") as f:
-            return pickle.load(f)
-    return {"encodings": [], "names": []}
+PREDICTOR_PATH = "models/shape_predictor_68_face_landmarks.dat"
+FACE_REC_MODEL = "models/dlib_face_recognition_resnet_model_v1.dat"
 
-def save_db(data):
-    with open(DB, "wb") as f:
-        pickle.dump(data, f)
+detector = dlib.get_frontal_face_detector()
 
-def add_face(image, name):
-    if name.strip() == "":
-        return False
+predictor = dlib.shape_predictor(
+    PREDICTOR_PATH
+)
 
-    db = load_db()
-    enc = face_recognition.face_encodings(image)
+face_encoder = dlib.face_recognition_model_v1(
+    FACE_REC_MODEL
+)
 
-    if len(enc) == 0:
-        return False
+# =====================================================
+# Face Loader
+# =====================================================
 
-    db["encodings"].append(enc[0])
-    db["names"].append(name)
+def load_faces(path="faces"):
+    """
+    Load enrolled faces and embeddings.
 
-    save_db(db)
-    return True
+    Returns:
+        dict{name: embedding}
+    """
 
-def recognize_face(frame, tolerance=0.5):
-    db = load_db()
+    known_faces = {}
 
-    if len(db["encodings"]) == 0:
-        return [], []
+    if not os.path.exists(path):
+        return known_faces
 
-    locs = face_recognition.face_locations(frame)
-    encs = face_recognition.face_encodings(frame, locs)
+    for filename in os.listdir(path):
 
-    names = []
+        if not filename.lower().endswith(
+            (".jpg", ".jpeg", ".png")
+        ):
+            continue
 
-    for enc in encs:
-        matches = face_recognition.compare_faces(
-            db["encodings"], enc, tolerance=tolerance
+        file_path = os.path.join(
+            path,
+            filename
         )
-        name = "Unknown"
-        if True in matches:
-            name = db["names"][matches.index(True)]
-        names.append(name)
 
-    return locs, names
+        image = cv2.imread(file_path)
+
+        rgb = cv2.cvtColor(
+            image,
+            cv2.COLOR_BGR2RGB
+        )
+
+        faces = detector(rgb)
+
+        if len(faces) == 0:
+            continue
+
+        face = faces[0]
+
+        shape = predictor(
+            rgb,
+            face
+        )
+
+        embedding = np.array(
+            face_encoder.compute_face_descriptor(
+                rgb,
+                shape
+            )
+        )
+
+        name = os.path.splitext(
+            filename
+        )[0]
+
+        known_faces[name] = embedding
+
+    return known_faces
+
+
+# =====================================================
+# Face Detection
+# =====================================================
+
+def detect_face(frame):
+    """
+    Detect faces and compute embeddings.
+
+    Returns:
+        [
+            {
+                'bbox': (x,y,w,h),
+                'embedding': embedding
+            }
+        ]
+    """
+
+    results = []
+
+    rgb = cv2.cvtColor(
+        frame,
+        cv2.COLOR_BGR2RGB
+    )
+
+    faces = detector(rgb)
+
+    for face in faces:
+
+        x = face.left()
+        y = face.top()
+
+        w = face.width()
+        h = face.height()
+
+        shape = predictor(
+            rgb,
+            face
+        )
+
+        embedding = np.array(
+            face_encoder.compute_face_descriptor(
+                rgb,
+                shape
+            )
+        )
+
+        results.append(
+            {
+                "bbox": (x, y, w, h),
+                "embedding": embedding
+            }
+        )
+
+    return results
+
+
+# =====================================================
+# Face Matching
+# =====================================================
+
+def match_face(
+    embedding,
+    known_faces,
+    tolerance=0.6
+):
+    """
+    Match embedding to known users.
+
+    Returns:
+        user_name | None
+    """
+
+    if not known_faces:
+        return None
+
+    best_match = None
+    best_distance = float("inf")
+
+    for name, known_embedding in known_faces.items():
+
+        distance = np.linalg.norm(
+            embedding - known_embedding
+        )
+
+        if distance < best_distance:
+
+            best_distance = distance
+            best_match = name
+
+    if best_distance < tolerance:
+        return best_match
+
+    return None
