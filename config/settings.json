@@ -1,0 +1,7 @@
+{
+  "whisper_model": "medium",
+  "face_confidence": 0.6,
+  "vad_aggressiveness": 2,
+  "conversation_timeout": 30,
+  "camera_index": 0
+}
