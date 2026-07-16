@@ -1,18 +1,287 @@
-2026-07-16 03:24:22,210 | INFO     | robot | Logging initialized. Log file: /home/tech_shinobi/Documents/EthioChatbot/logs/app.log
-2026-07-16 03:24:22,213 | INFO     | robot.app | SYSTEM_STARTUP begin
-2026-07-16 03:24:22,213 | INFO     | robot.state_manager | Configuration loaded from /home/tech_shinobi/Documents/EthioChatbot/config/settings.json
-2026-07-16 03:24:22,214 | INFO     | robot.app | Configuration loaded: whisper_model=medium, camera_index=0, vad_aggressiveness=2
-2026-07-16 03:24:22,214 | INFO     | robot.app | Shared application state initialized
-2026-07-16 03:24:22,214 | INFO     | robot.app | Service bootstrap: 0 service(s) registered
-2026-07-16 03:24:22,214 | INFO     | robot.app | No service threads to start (Milestone 1)
-2026-07-16 03:24:22,214 | INFO     | robot.state_manager | State transition: IDLE -> IDLE
-2026-07-16 03:24:22,214 | INFO     | robot.app | SYSTEM_STARTUP complete
-2026-07-16 05:39:15,493 | INFO     | robot | Logging initialized. Log file: /home/tech_shinobi/Documents/EthioChatbot/logs/app.log
-2026-07-16 05:39:15,502 | INFO     | robot.app | SYSTEM_STARTUP begin
-2026-07-16 05:39:15,504 | INFO     | robot.state_manager | Configuration loaded from /home/tech_shinobi/Documents/EthioChatbot/config/settings.json
-2026-07-16 05:39:15,505 | INFO     | robot.app | Configuration loaded: whisper_model=medium, camera_index=0, vad_aggressiveness=2
-2026-07-16 05:39:15,505 | INFO     | robot.app | Shared application state initialized
-2026-07-16 05:39:15,506 | INFO     | robot.app | Service bootstrap: 0 service(s) registered
-2026-07-16 05:39:15,507 | INFO     | robot.app | No service threads to start (Milestone 1)
-2026-07-16 05:39:15,507 | INFO     | robot.state_manager | State transition: IDLE -> IDLE
-2026-07-16 05:39:15,508 | INFO     | robot.app | SYSTEM_STARTUP complete
+2026-07-16 13:14:15,881 | INFO     | robot | Logging initialized. Log file: /home/tech_shinobi/Documents/EthioChatbot/logs/app.log
+2026-07-16 13:14:26,411 | INFO     | robot.app | SYSTEM_STARTUP begin
+2026-07-16 13:14:26,412 | INFO     | robot.app | SYSTEM_STARTUP begin
+2026-07-16 13:14:26,413 | INFO     | robot.state_manager | Configuration loaded from /home/tech_shinobi/Documents/EthioChatbot/config/settings.json
+2026-07-16 13:14:26,414 | INFO     | robot.app | Configuration loaded: whisper_model=medium, camera_index=0, vad_aggressiveness=2
+2026-07-16 13:14:26,414 | INFO     | robot.app | Shared application state initialized
+2026-07-16 13:14:26,414 | INFO     | robot.event_bus | Handler subscribed to event: FACE_DETECTED
+2026-07-16 13:14:26,415 | INFO     | robot.event_bus | Handler subscribed to event: FACE_RECOGNIZED
+2026-07-16 13:14:26,415 | INFO     | robot.event_bus | Handler subscribed to event: WAKE_WORD_DETECTED
+2026-07-16 13:14:26,415 | INFO     | robot.state_manager | Configuration loaded from /home/tech_shinobi/Documents/EthioChatbot/config/settings.json
+2026-07-16 13:14:26,416 | INFO     | robot.event_bus | Handler subscribed to event: TRANSCRIPTION_READY
+2026-07-16 13:14:26,416 | INFO     | robot.app | Configuration loaded: whisper_model=medium, camera_index=0, vad_aggressiveness=2
+2026-07-16 13:14:26,416 | INFO     | robot.conversation_manager | Conversation manager handlers registered
+2026-07-16 13:14:26,416 | INFO     | robot.app | Shared application state initialized
+2026-07-16 13:14:26,417 | INFO     | robot.app | Service bootstrap: 4 service(s) registered
+2026-07-16 13:14:26,417 | INFO     | robot.event_bus | Handler subscribed to event: FACE_DETECTED
+2026-07-16 13:14:26,419 | INFO     | robot.event_bus | Handler subscribed to event: FACE_RECOGNIZED
+2026-07-16 13:14:26,420 | INFO     | robot.event_bus | Handler subscribed to event: WAKE_WORD_DETECTED
+2026-07-16 13:14:26,420 | INFO     | robot.event_bus | Handler subscribed to event: TRANSCRIPTION_READY
+2026-07-16 13:14:26,420 | INFO     | robot.app | Service thread started: camera
+2026-07-16 13:14:26,421 | INFO     | robot.conversation_manager | Conversation manager handlers registered
+2026-07-16 13:14:26,423 | INFO     | robot.app | Service bootstrap: 4 service(s) registered
+2026-07-16 13:14:26,423 | INFO     | robot.face_recognition | Face database loaded: 0 user(s)
+2026-07-16 13:14:26,424 | INFO     | robot.whisper_utils | Loading Whisper model 'medium' on cpu...
+2026-07-16 13:14:26,426 | INFO     | robot.app | Service thread started: audio
+2026-07-16 13:14:26,427 | INFO     | robot.app | Service thread started: camera
+2026-07-16 13:14:26,431 | INFO     | robot.face_recognition | Face database loaded: 0 user(s)
+2026-07-16 13:14:26,432 | INFO     | robot.vad_handler | VAD initialized (aggressiveness=2)
+2026-07-16 13:14:26,433 | INFO     | robot.app | Service thread started: vad
+2026-07-16 13:14:26,435 | INFO     | robot.app | Service thread started: audio
+2026-07-16 13:14:26,436 | INFO     | robot.state_manager | Status update: vad_status -> IDLE
+2026-07-16 13:14:26,439 | INFO     | robot.app | Service thread started: timeout
+2026-07-16 13:14:26,441 | INFO     | robot.vad_handler | VAD initialized (aggressiveness=2)
+2026-07-16 13:14:26,441 | INFO     | robot.app | SYSTEM_STARTUP complete
+2026-07-16 13:14:26,441 | INFO     | robot.app | Service thread started: vad
+2026-07-16 13:14:26,441 | INFO     | robot.state_manager | Status update: vad_status -> IDLE
+2026-07-16 13:14:26,489 | INFO     | robot.app | Service thread started: timeout
+2026-07-16 13:14:26,490 | INFO     | robot.app | SYSTEM_STARTUP complete
+2026-07-16 13:14:26,556 | INFO     | robot.state_manager | Status update: camera_status -> ACTIVE
+2026-07-16 13:14:26,738 | INFO     | robot.camera_service | Camera opened at index 0
+2026-07-16 13:14:26,739 | ERROR    | robot.camera_service | Could not open camera at index 0
+2026-07-16 13:14:26,744 | INFO     | robot.state_manager | Status update: camera_status -> ERROR
+2026-07-16 13:14:56,173 | INFO     | robot.whisper_utils | Whisper model 'medium' loaded on cpu
+2026-07-16 13:14:56,178 | INFO     | robot.state_manager | Status update: wake_word_status -> IDLE
+2026-07-16 13:14:56,178 | INFO     | robot.state_manager | Status update: wake_word_status -> IDLE
+2026-07-16 13:15:21,840 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:15:21,841 | INFO     | robot.state_manager | State transition: IDLE -> FACE_DETECTED
+2026-07-16 13:15:21,842 | INFO     | robot.state_manager | State transition: IDLE -> FACE_DETECTED
+2026-07-16 13:15:21,842 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:15:21,843 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:15:21,843 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:15:23,042 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:15:23,042 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:15:23,042 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:15:30,153 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:15:30,154 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:15:30,155 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:15:30,155 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:15:30,673 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:15:30,673 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:15:30,673 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:15:37,247 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:15:37,249 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:15:37,249 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:15:37,249 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:15:37,759 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:15:37,759 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:15:37,760 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:15:39,959 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:15:39,960 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:15:39,961 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:15:39,961 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:15:41,156 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:15:41,156 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:15:41,156 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:15:43,472 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:15:43,478 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:15:43,478 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:15:43,479 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:15:45,319 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:15:45,320 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:15:45,320 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:15:47,052 | INFO     | robot.state_manager | Configuration loaded from /home/tech_shinobi/Documents/EthioChatbot/config/settings.json
+2026-07-16 13:15:55,211 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:15:55,213 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:15:55,213 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:15:55,213 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:15:55,772 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:15:55,773 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:15:55,773 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:15:56,986 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:15:56,988 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:15:56,989 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:15:56,989 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:15:58,161 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:15:58,161 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:15:58,161 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:16:13,726 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:16:13,744 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:16:13,746 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:16:13,747 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:16:14,257 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:16:14,257 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:16:14,257 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:16:21,873 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:16:21,874 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:16:21,874 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:16:21,875 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:16:22,514 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:16:22,514 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:16:22,514 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:16:34,533 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:16:34,535 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:16:34,535 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:16:34,535 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:16:47,771 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:16:47,772 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:16:47,773 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:16:48,498 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:16:48,505 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:16:48,505 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:16:48,505 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:17:04,746 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:17:04,747 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:17:04,747 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:17:05,412 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:17:05,413 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:17:05,413 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:17:05,414 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:17:07,385 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:17:07,385 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:17:07,385 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:17:08,677 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:17:08,679 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:17:08,679 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:17:08,680 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:17:17,678 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:17:17,678 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:17:17,678 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:17:19,007 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:17:19,008 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:17:19,009 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:17:19,009 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:17:19,616 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:17:19,616 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:17:19,616 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:17:21,628 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:17:21,633 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:17:21,633 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:17:21,634 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:17:22,146 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:17:22,146 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:17:22,146 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:17:24,451 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:17:24,452 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:17:24,453 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:17:24,453 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:17:25,007 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:17:25,007 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:17:25,007 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:17:26,332 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:17:26,334 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:17:26,334 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:17:26,334 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:17:30,551 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:17:30,551 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:17:30,551 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:17:31,230 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:17:31,233 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:17:31,233 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:17:31,233 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:17:33,259 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:17:33,259 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:17:33,259 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:17:35,038 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:17:35,040 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:17:35,040 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:17:35,041 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:17:37,742 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:17:37,743 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:17:37,743 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:17:38,417 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:17:38,419 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:17:38,419 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:17:38,419 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:17:42,550 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:17:42,551 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:17:42,552 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:17:43,941 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:17:43,942 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:17:43,943 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:17:43,943 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:17:45,137 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:17:45,138 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:17:45,138 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:18:13,923 | INFO     | robot.state_manager | Configuration loaded from /home/tech_shinobi/Documents/EthioChatbot/config/settings.json
+2026-07-16 13:18:57,333 | INFO     | robot.state_manager | Configuration loaded from /home/tech_shinobi/Documents/EthioChatbot/config/settings.json
+2026-07-16 13:18:57,343 | INFO     | robot.state_manager | Configuration saved to /home/tech_shinobi/Documents/EthioChatbot/config/settings.json
+2026-07-16 13:19:14,315 | INFO     | robot | Logging initialized. Log file: /home/tech_shinobi/Documents/EthioChatbot/logs/app.log
+2026-07-16 13:19:19,766 | INFO     | robot.app | SYSTEM_STARTUP begin
+2026-07-16 13:19:19,767 | INFO     | robot.state_manager | Configuration loaded from /home/tech_shinobi/Documents/EthioChatbot/config/settings.json
+2026-07-16 13:19:19,767 | INFO     | robot.app | Configuration loaded: whisper_model=base, camera_index=0, vad_aggressiveness=2
+2026-07-16 13:19:19,767 | INFO     | robot.app | Shared application state initialized
+2026-07-16 13:19:19,767 | INFO     | robot.event_bus | Handler subscribed to event: FACE_DETECTED
+2026-07-16 13:19:19,767 | INFO     | robot.event_bus | Handler subscribed to event: FACE_RECOGNIZED
+2026-07-16 13:19:19,767 | INFO     | robot.event_bus | Handler subscribed to event: WAKE_WORD_DETECTED
+2026-07-16 13:19:19,767 | INFO     | robot.event_bus | Handler subscribed to event: TRANSCRIPTION_READY
+2026-07-16 13:19:19,768 | INFO     | robot.conversation_manager | Conversation manager handlers registered
+2026-07-16 13:19:19,768 | INFO     | robot.app | Service bootstrap: 4 service(s) registered
+2026-07-16 13:19:19,768 | INFO     | robot.app | Service thread started: camera
+2026-07-16 13:19:19,769 | INFO     | robot.whisper_utils | Loading Whisper model 'base' on cpu...
+2026-07-16 13:19:19,769 | INFO     | robot.face_recognition | Face database loaded: 0 user(s)
+2026-07-16 13:19:19,769 | INFO     | robot.app | Service thread started: audio
+2026-07-16 13:19:19,770 | INFO     | robot.vad_handler | VAD initialized (aggressiveness=2)
+2026-07-16 13:19:19,770 | INFO     | robot.app | Service thread started: vad
+2026-07-16 13:19:19,771 | INFO     | robot.state_manager | Status update: vad_status -> IDLE
+2026-07-16 13:19:19,772 | INFO     | robot.app | Service thread started: timeout
+2026-07-16 13:19:19,772 | INFO     | robot.app | SYSTEM_STARTUP complete
+2026-07-16 13:19:19,981 | INFO     | robot.state_manager | Status update: camera_status -> ACTIVE
+2026-07-16 13:19:19,984 | INFO     | robot.camera_service | Camera opened at index 0
+2026-07-16 13:19:21,147 | INFO     | robot.whisper_utils | Whisper model 'base' loaded on cpu
+2026-07-16 13:19:21,147 | INFO     | robot.state_manager | Status update: wake_word_status -> IDLE
+2026-07-16 13:19:46,298 | INFO     | robot.app | SYSTEM_STARTUP begin
+2026-07-16 13:19:46,300 | INFO     | robot.state_manager | Configuration loaded from /home/tech_shinobi/Documents/EthioChatbot/config/settings.json
+2026-07-16 13:19:46,300 | INFO     | robot.app | Configuration loaded: whisper_model=base, camera_index=0, vad_aggressiveness=2
+2026-07-16 13:19:46,301 | INFO     | robot.app | Shared application state initialized
+2026-07-16 13:19:46,301 | INFO     | robot.event_bus | Handler subscribed to event: FACE_DETECTED
+2026-07-16 13:19:46,302 | INFO     | robot.event_bus | Handler subscribed to event: FACE_RECOGNIZED
+2026-07-16 13:19:46,302 | INFO     | robot.event_bus | Handler subscribed to event: WAKE_WORD_DETECTED
+2026-07-16 13:19:46,302 | INFO     | robot.event_bus | Handler subscribed to event: TRANSCRIPTION_READY
+2026-07-16 13:19:46,303 | INFO     | robot.conversation_manager | Conversation manager handlers registered
+2026-07-16 13:19:46,303 | INFO     | robot.app | Service bootstrap: 4 service(s) registered
+2026-07-16 13:19:46,304 | INFO     | robot.app | Service thread started: camera
+2026-07-16 13:19:46,305 | INFO     | robot.face_recognition | Face database loaded: 0 user(s)
+2026-07-16 13:19:46,306 | INFO     | robot.app | Service thread started: audio
+2026-07-16 13:19:46,306 | INFO     | robot.state_manager | Status update: wake_word_status -> IDLE
+2026-07-16 13:19:46,307 | INFO     | robot.vad_handler | VAD initialized (aggressiveness=2)
+2026-07-16 13:19:46,308 | INFO     | robot.app | Service thread started: vad
+2026-07-16 13:19:46,308 | INFO     | robot.state_manager | Status update: vad_status -> IDLE
+2026-07-16 13:19:46,310 | INFO     | robot.app | Service thread started: timeout
+2026-07-16 13:19:46,310 | INFO     | robot.app | SYSTEM_STARTUP complete
+2026-07-16 13:19:46,324 | ERROR    | robot.camera_service | Could not open camera at index 0
+2026-07-16 13:19:46,324 | INFO     | robot.state_manager | Status update: camera_status -> ERROR
+2026-07-16 13:19:57,518 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:19:57,519 | INFO     | robot.state_manager | State transition: IDLE -> FACE_DETECTED
+2026-07-16 13:19:57,521 | INFO     | robot.state_manager | State transition: IDLE -> FACE_DETECTED
+2026-07-16 13:19:57,521 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:19:57,521 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:19:57,522 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:19:58,038 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:19:58,039 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:19:58,039 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:19:58,758 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:19:58,760 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:19:58,760 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:19:58,760 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:20:00,604 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:20:00,604 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:20:00,605 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:21:32,302 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:21:32,306 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:21:32,307 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:21:32,307 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:21:32,826 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:21:32,826 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:21:32,826 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:21:37,785 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:21:37,787 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:21:37,787 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:21:37,787 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:21:38,324 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:21:38,325 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:21:38,325 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:21:39,035 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:21:39,037 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:21:39,037 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:21:39,037 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:21:39,589 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:21:39,590 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:21:39,590 | INFO     | robot.camera_service | Face lost (was UNKNOWN)
+2026-07-16 13:21:42,421 | INFO     | robot.event_bus | Event published: FACE_DETECTED {}
+2026-07-16 13:21:42,423 | INFO     | robot.camera_service | Face detected
+2026-07-16 13:21:42,423 | INFO     | robot.event_bus | Event published: FACE_UNKNOWN {'confidence': 0.0}
+2026-07-16 13:21:42,423 | INFO     | robot.camera_service | Face present but not recognized
+2026-07-16 13:21:42,932 | INFO     | robot.event_bus | Event published: FACE_LOST {'previous': 'UNKNOWN'}
+2026-07-16 13:21:42,932 | INFO     | robot.state_manager | Status update: recognized_user -> None
+2026-07-16 13:21:42,932 | INFO     | robot.camera_service | Face lost (was UNKNOWN)

@@ -1,34 +1,70 @@
 """Streamlit entry point and application bootstrap.
 
-Milestone 1 scope: configuration loading, logging, shared application
-state, and the service-thread bootstrap structure (see ARCHITECTURE.md
-"Startup Sequence"). Camera, microphone, face recognition, Whisper, VAD,
-playback, and the full state machine are added in later milestones and
-plug into bootstrap_services() below without changing this file's shape.
+This file owns startup only (ARCHITECTURE.md "Startup Sequence") and a
+minimal landing page. Milestone 1 added configuration loading, logging,
+shared application state, and the service-thread bootstrap structure.
+Milestone 2 plugged in the camera service and the automatic greeting
+workflow. Milestone 3 plugged in the continuous microphone service
+(Whisper-based wake-word detection) and language selection. Milestone 4
+added the scenario engine. Milestone 5 plugged in the VAD
+interruption-monitoring service. Milestone 6 wired live conversation
+transcription into the scenario engine and added the timeout-monitoring
+service plus a validated finite state machine (utils/state_manager.py).
+Milestone 7 moves the full monitoring view into pages/1_Dashboard.py and
+adds pages/2_Enroll_Face.py, pages/3_Manage_Scenarios.py, and
+pages/4_Settings.py -- all UI-only, reading/writing through utils/*
+functions rather than containing business logic themselves (CLAUDE.md
+"Streamlit is NOT the robot").
+
+pages/*.py import get_app_state from this module to reach the same
+cached AppState singleton; st.cache_resource is keyed by function
+identity, not by which script called it, so this is safe and does not
+re-run bootstrap. Guarding main() with `if __name__ == "__main__"` (below)
+is what makes that safe: a page importing this module runs its
+definitions but not main()/bootstrap again.
 """
 from __future__ import annotations
 
-import platform
 import threading
-from datetime import datetime, timezone
 
 import streamlit as st
 
-from utils.logger import LOG_FILE, get_logger
+from utils import audio_service, camera_service, conversation_manager, vad_handler
+from utils.logger import get_logger
 from utils.state_manager import AppState, load_configuration
 
 logger = get_logger("app")
 
 
 def bootstrap_services(state: AppState) -> None:
-    """Register background service threads on shared state.
+    """Register background service threads on shared state."""
+    conversation_manager.register_handlers(state)
 
-    Milestone 1 has no services to register: camera_service, audio_service,
-    whisper_utils, vad_handler, and playback are added in Milestones 2-5 and
-    will do `state.services["camera"] = threading.Thread(...)` etc. here.
-    This is the wiring point those milestones extend, not a stand-in for
-    logic that belongs in Milestone 1.
-    """
+    state.services["camera"] = threading.Thread(
+        target=camera_service.run_camera_service,
+        args=(state, state.stop_event),
+        name="camera_service",
+        daemon=True,
+    )
+    state.services["audio"] = threading.Thread(
+        target=audio_service.run_audio_service,
+        args=(state, state.stop_event),
+        name="audio_service",
+        daemon=True,
+    )
+    state.services["vad"] = threading.Thread(
+        target=vad_handler.monitor_interruptions,
+        args=(state, state.stop_event),
+        name="vad_handler",
+        daemon=True,
+    )
+    state.services["timeout"] = threading.Thread(
+        target=conversation_manager.monitor_timeout,
+        args=(state, state.stop_event),
+        name="timeout_monitor",
+        daemon=True,
+    )
+
     logger.info("Service bootstrap: %d service(s) registered", len(state.services))
 
 
@@ -39,7 +75,7 @@ def start_registered_services(state: AppState) -> None:
             thread.start()
             logger.info("Service thread started: %s", name)
     if not state.services:
-        logger.info("No service threads to start (Milestone 1)")
+        logger.info("No service threads to start")
 
 
 def bootstrap_app() -> AppState:
@@ -75,43 +111,30 @@ def get_app_state() -> AppState:
     return bootstrap_app()
 
 
-def render_dashboard(state: AppState) -> None:
+def render_landing(state: AppState) -> None:
     st.set_page_config(page_title="Offline Conversational Robot", page_icon="🤖")
     st.title("Offline Multimodal Conversational Robot")
-    st.caption(
-        "Milestone 1: Project Setup — configuration, logging, shared state, service bootstrap"
-    )
+    st.caption("Offline, event-driven conversational robot -- see the pages in the sidebar.")
 
     snapshot = state.snapshot()
-
     col1, col2, col3 = st.columns(3)
     col1.metric("System Status", snapshot["system_status"])
     col2.metric("Current State", snapshot["current_state"])
-    col3.metric("Registered Services", len(snapshot["registered_services"]))
+    col3.metric("Recognized User", snapshot["recognized_user"] or "-")
 
-    st.subheader("Configuration")
-    st.json(state.config)
-
-    st.subheader("Runtime State")
-    st.json(snapshot)
-
-    st.subheader("Logging")
-    st.write(f"Log file: `{LOG_FILE.resolve()}`")
-
-    st.subheader("Host Environment")
-    st.json(
-        {
-            "python_version": platform.python_version(),
-            "platform": platform.platform(),
-            "active_threads": threading.active_count(),
-            "checked_at": datetime.now(timezone.utc).isoformat(),
-        }
+    st.markdown(
+        "Use the sidebar to navigate:\n"
+        "- **Dashboard** -- live camera feed, status, and logs\n"
+        "- **Enroll Face** -- register a new user\n"
+        "- **Manage Scenarios** -- wake words and conversation dialogs\n"
+        "- **Settings** -- recognition/VAD/Whisper/GPU configuration"
     )
 
 
 def main() -> None:
     state = get_app_state()
-    render_dashboard(state)
+    render_landing(state)
 
 
-main()
+if __name__ == "__main__":
+    main()

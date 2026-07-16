@@ -57,3 +57,12 @@ def get_logger(name: str) -> logging.Logger:
     """Return a module-scoped logger that feeds into the root application logger."""
     setup_logging()
     return logging.getLogger(f"{ROOT_LOGGER_NAME}.{name}")
+
+
+def read_recent_logs(n: int = 200) -> list[str]:
+    """Return the last n lines of the application log file, for the Dashboard page."""
+    if not LOG_FILE.exists():
+        return []
+    with LOG_FILE.open("r", encoding="utf-8", errors="replace") as handle:
+        lines = handle.readlines()
+    return [line.rstrip("\n") for line in lines[-n:]]
