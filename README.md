@@ -1,21 +1,22 @@
 # ROLE
 
-You are a Principal AI Software Architect, Robotics Engineer, Computer Vision Engineer, Speech AI Engineer, and Senior Python Developer.
+You are a Principal Software Architect, Robotics Engineer, Computer Vision Engineer, Speech Processing Engineer, and Senior Python Developer.
 
-Your task is to design and implement a complete production-quality Offline Multimodal Conversational Robot similar to Emo Robot.
+Your task is to design and implement a complete Offline Multimodal Conversational Robot similar to Emo Robot.
 
-The system must be:
+The objective is to deliver a complete working demonstration within one working day.
 
-- Fully offline
-- Modular
-- Extensible
-- Production-ready
-- Maintainable
-- Event-driven
-- Streamlit-based
-- Server-side processing only
+This project prioritizes:
 
-The goal is to deliver a complete working software system, not example code snippets.
+1. End-to-end functionality
+2. Integration between modules
+3. Demonstration stability
+4. Maintainability
+5. Performance
+
+The goal is not to build a perfect production platform.
+
+The goal is to build a reliable, demonstratable offline conversational robot.
 
 ---
 
@@ -25,75 +26,212 @@ Offline Multimodal Conversational Robot
 
 ---
 
+# DEMONSTRATION FIRST PRINCIPLE
+
+This project must be completed within one working day.
+
+When implementation choices exist:
+
+Choose the simplest solution that:
+
+- Satisfies acceptance tests
+- Satisfies the demonstration workflow
+- Preserves offline operation
+- Preserves modularity
+
+Avoid:
+
+- Over-engineering
+- Premature optimization
+- Complex design patterns
+- Distributed architectures
+- Unnecessary abstractions
+
+A working demonstration is more important than architectural sophistication.
+
+---
+
 # PROJECT OBJECTIVE
 
-Build an intelligent conversational robot capable of:
+Build a robot capable of:
 
-1. Detecting people using a webcam.
-2. Recognizing enrolled users.
-3. Greeting recognized users.
-4. Listening for ignition words.
-5. Activating a conversation session.
-6. Detecting spoken language.
-7. Performing Speech-to-Text using Whisper.
-8. Matching user speech against predefined dialog scenarios.
-9. Responding with prerecorded audio.
-10. Detecting interruptions while speaking.
-11. Pausing and resuming audio playback.
-12. Managing conversation state.
-13. Supporting multiple languages.
-14. Operating entirely offline.
+- Face enrollment
+- Face detection
+- Face recognition
+- Automatic greeting
+- Wake word detection
+- Language selection
+- Whisper speech recognition
+- Scenario matching
+- Audio playback
+- Voice activity detection
+- Playback interruption handling
+- Playback resume
+- Conversation timeout
+- Return to idle state
 
-The conversational behaviour should emulate Emo Robot.
+All processing must occur locally.
+
+No cloud services may be used.
 
 ---
 
 # SUPPORTED LANGUAGES
 
-The system must support:
+Required:
 
 - English
 - Amharic (አማርኛ)
 - Arabic (العربية)
 
-The architecture must allow future language expansion.
+The architecture must support future language expansion.
+
+---
+
+# NON-GOALS
+
+The system does NOT include:
+
+- ChatGPT
+- GPT Models
+- Claude API
+- OpenAI API
+- Ollama
+- RAG
+- Vector Databases
+- Text Generation
+- LLM Inference
+- Semantic Search
+- Text-To-Speech
+- Cloud Services
+
+---
+
+# CONVERSATION MODEL
+
+This is NOT an LLM chatbot.
+
+The robot never generates responses.
+
+The robot never generates speech.
+
+The robot never creates dynamic conversations.
+
+Every response must already exist as a prerecorded audio file.
+
+Conversation Flow:
+
+User Speech
+
+↓
+
+Whisper Transcription
+
+↓
+
+Text Normalization
+
+↓
+
+Scenario Matching
+
+↓
+
+Locate Audio File
+
+↓
+
+Play Audio
+
+---
+
+# REAL-TIME OPERATION REQUIREMENTS
+
+The robot operates continuously.
+
+At startup:
+
+- Webcam monitoring begins
+- Microphone monitoring begins
+- Face recognition begins
+- Wake word detection begins
+
+No button press is required.
+
+The robot remains ready for interaction at all times.
 
 ---
 
 # HIGH LEVEL WORKFLOW
 
 Face Enrollment
-    ↓
+
+↓
+
 Face Detection
-    ↓
+
+↓
+
 Face Recognition
-    ↓
+
+↓
+
 Greeting
-    ↓
-Waiting For Ignition Word
-    ↓
+
+↓
+
+Waiting For Wake Word
+
+↓
+
 Wake Word Detection
-    ↓
+
+↓
+
 Language Selection
-    ↓
+
+↓
+
 Conversation Activated
-    ↓
+
+↓
+
 Speech To Text
-    ↓
-Dialog Matching
-    ↓
+
+↓
+
+Scenario Matching
+
+↓
+
 Audio Playback
-    ↓
+
+↓
+
 Interruption Detection
-    ↓
+
+↓
+
 Pause Playback
-    ↓
+
+↓
+
+Play Interruption Audio
+
+↓
+
 Resume Playback
-    ↓
-Conversation Continues
-    ↓
-Timeout
-    ↓
+
+↓
+
+Continue Conversation
+
+↓
+
+Conversation Timeout
+
+↓
+
 Return To Idle
 
 ---
@@ -101,73 +239,125 @@ Return To Idle
 # PROJECT STRUCTURE
 
 project/
-│
+
 ├── app.py
+
+├── README.md
+
+├── requirements.txt
+
 │
 ├── faces/
+
 │
 ├── audio/
 │   ├── english/
 │   ├── amharic/
 │   ├── arabic/
-│   │
 │   └── config/
 │       └── dialog_config.json
+
+│
+├── config/
+│   └── settings.json
+
 │
 ├── pages/
 │   ├── 1_Dashboard.py
 │   ├── 2_Enroll_Face.py
 │   ├── 3_Manage_Scenarios.py
 │   └── 4_Settings.py
-│
-├── config/
-│   └── settings.json
+
 │
 ├── utils/
+│   ├── camera_service.py
+│   ├── audio_service.py
+│   ├── event_bus.py
 │   ├── face_recognition.py
-│   ├── vad_handler.py
 │   ├── whisper_utils.py
+│   ├── vad_handler.py
 │   ├── playback.py
 │   ├── conversation_manager.py
 │   ├── state_manager.py
 │   └── logger.py
+
 │
 ├── models/
+
 │
-├── requirements.txt
-│
-└── README.md
+└── tests/
 
 ---
 
 # TECHNOLOGY STACK
 
-Frontend:
+Frontend
+
 - Streamlit
 
-Computer Vision:
+Computer Vision
+
 - OpenCV
 - Dlib
 - NumPy
 
-Speech-to-Text:
+Speech Recognition
+
 - OpenAI Whisper
 
-Voice Activity Detection:
+Voice Activity Detection
+
 - WebRTC VAD
 - sounddevice
 
-Audio:
+Audio Playback
+
 - pygame
 
-Utilities:
+Utilities
+
 - pathlib
 - logging
 - threading
 - json
 
-Language:
+Programming Language
+
 - Python 3.11+
+
+Only approved technologies may be used.
+
+---
+
+# STREAMLIT RESPONSIBILITIES
+
+Streamlit is not the robot.
+
+Streamlit is only:
+
+- Monitoring dashboard
+- Administration interface
+- Configuration interface
+
+Streamlit may:
+
+- Display camera feed
+- Display logs
+- Display system state
+- Display users
+- Manage scenarios
+- Manage settings
+
+Streamlit must never:
+
+- Execute Whisper
+- Perform face recognition
+- Execute VAD
+- Execute playback logic
+- Execute scenario matching
+- Manage FSM transitions
+
+Business logic belongs exclusively to service modules.
 
 ---
 
@@ -179,7 +369,7 @@ pages/1_Dashboard.py
 
 Purpose:
 
-Runtime monitoring and control.
+Runtime monitoring.
 
 Features:
 
@@ -187,17 +377,9 @@ Features:
 
 Display:
 
-- Live webcam stream
+- Live webcam feed
 - Face bounding boxes
-- Recognized user names
-
-Use:
-
-load_faces()
-detect_face()
-match_face()
-
----
+- Recognized users
 
 ## Status Cards
 
@@ -209,28 +391,11 @@ Display:
 - Wake Word Status
 - VAD Status
 - Playback Status
-- Conversation Status
+- Conversation State
 
----
-
-## Conversation Monitoring
+## System Logs
 
 Display:
-
-Current state:
-
-- IDLE
-- FACE_RECOGNIZED
-- WAITING_FOR_WAKE_WORD
-- CONVERSATION_ACTIVE
-- PLAYING_RESPONSE
-- INTERRUPTED
-
----
-
-## System Log
-
-Continuously log:
 
 - Face detected
 - Face recognized
@@ -238,7 +403,7 @@ Continuously log:
 - Wake word detected
 - Language selected
 - Conversation activated
-- Dialog matched
+- Scenario matched
 - Audio played
 - Audio paused
 - Audio resumed
@@ -255,10 +420,10 @@ pages/2_Enroll_Face.py
 Features:
 
 - Webcam capture
-- Photo upload
+- Image upload
 - User ID input
-- Save image to faces/
-- Validate enrollment
+- Save images to faces/
+- Enrollment validation
 - Display enrolled users
 
 ---
@@ -273,48 +438,15 @@ Purpose:
 
 Conversation Authoring Tool
 
-NOT a playback page.
+Features:
 
-Administrators must be able to:
+## Wake Word Management
 
-## Language Management
+Add wake words
 
-English
+Edit wake words
 
-Amharic
-
-Arabic
-
----
-
-## Ignition Word Management
-
-Add ignition word
-
-Edit ignition word
-
-Delete ignition word
-
-Examples:
-
-English
-
-- hello robot
-- hey robot
-- computer
-
-Amharic
-
-- ሰላም ሮቦት
-- ሄይ ሮቦት
-
-Arabic
-
-- مرحبا روبوت
-- أهلا روبوت
-- يا روبوت
-
----
+Delete wake words
 
 ## Dialog Management
 
@@ -325,7 +457,7 @@ Each dialog contains:
     "response_audio": ""
 }
 
-Administrator can:
+Functions:
 
 - Add dialog
 - Edit dialog
@@ -333,83 +465,63 @@ Administrator can:
 - Upload audio
 - Replace audio
 - Preview audio
-- Save scenario
 
 ---
 
-## Scenario Storage
+# WAKE WORD STORAGE
+
+Store wake words in:
+
+config/settings.json
+
+Example:
+
+{
+  "wake_words": {
+    "english": [
+      "hello robot",
+      "hey robot",
+      "computer"
+    ],
+
+    "amharic": [
+      "ሰላም ሮቦት",
+      "ሄይ ሮቦት"
+    ],
+
+    "arabic": [
+      "مرحبا روبوت",
+      "أهلا روبوت"
+    ]
+  }
+}
+
+Wake words are not stored in dialog_config.json.
+
+---
+
+# SCENARIO STORAGE
+
+Store dialogs in:
 
 audio/config/dialog_config.json
 
 Example:
 
 {
-  "english": {
+  "english": [
+    {
+      "user_text": "what is your name",
+      "response_audio": "name.wav"
+    }
+  ],
 
-    "ignition_words": [
-      "hello robot",
-      "hey robot"
-    ],
+  "amharic": [],
 
-    "dialogs": [
-
-      {
-        "user_text":
-        "what is your name",
-
-        "response_audio":
-        "audio/english/name.wav"
-      },
-
-      {
-        "user_text":
-        "how are you",
-
-        "response_audio":
-        "audio/english/how_are_you.wav"
-      }
-
-    ]
-  },
-
-  "amharic": {
-
-    "ignition_words": [
-      "ሰላም ሮቦት"
-    ],
-
-    "dialogs": [
-
-      {
-        "user_text":
-        "ስምህ ማነው",
-
-        "response_audio":
-        "audio/amharic/name.wav"
-      }
-
-    ]
-  },
-
-  "arabic": {
-
-    "ignition_words": [
-      "مرحبا روبوت"
-    ],
-
-    "dialogs": [
-
-      {
-        "user_text":
-        "ما اسمك",
-
-        "response_audio":
-        "audio/arabic/name.wav"
-      }
-
-    ]
-  }
+  "arabic": []
 }
+
+Only dialog definitions belong here.
 
 ---
 
@@ -421,18 +533,65 @@ pages/4_Settings.py
 
 Features:
 
-- Face recognition sensitivity
-- VAD aggressiveness
-- Whisper model selection
-- GPU acceleration
-- CPU information
-- RAM information
-- GPU information
-- Save settings
+- Face Recognition Sensitivity
+- VAD Aggressiveness
+- Whisper Model Selection
+- GPU Acceleration
+- CPU Information
+- RAM Information
+- GPU Information
 
-Store:
+Store settings in:
 
 config/settings.json
+
+---
+
+# CORE SERVICES
+
+## Camera Service
+
+File:
+
+utils/camera_service.py
+
+Responsibilities:
+
+- Webcam initialization
+- Continuous frame capture
+- Face event publication
+
+---
+
+## Audio Service
+
+File:
+
+utils/audio_service.py
+
+Responsibilities:
+
+- Continuous microphone capture
+- Wake word monitoring
+- Whisper coordination
+- VAD coordination
+
+---
+
+## Event Bus
+
+File:
+
+utils/event_bus.py
+
+Responsibilities:
+
+- Publish events
+- Subscribe handlers
+- Route events
+- Thread-safe communication
+
+All services communicate through events.
 
 ---
 
@@ -453,10 +612,12 @@ match_face()
 Requirements:
 
 - Dlib facial embeddings
-- Persistent enrolled users
 - Multiple user support
-- Bounding box output
+- Persistent storage
 - Confidence scoring
+- Bounding box output
+
+Demonstration reliability is more important than biometric perfection.
 
 ---
 
@@ -476,14 +637,14 @@ detect_wake_word()
 
 Requirements:
 
-- Local model caching
 - Offline execution
+- Model caching
+- Singleton loading
 - Language detection
-- English support
-- Amharic support
-- Arabic support
+- Load once
+- Reuse throughout runtime
 
-Available models:
+Supported Models:
 
 - tiny
 - base
@@ -514,9 +675,9 @@ monitor_interruptions()
 Requirements:
 
 - Real-time monitoring
-- Interruption callback
+- Interruption detection
 - Playback coordination
-- Noise resilience
+- Noise tolerance
 
 ---
 
@@ -542,10 +703,46 @@ Requirements:
 
 - WAV support
 - MP3 support
-- Pause
-- Resume
-- Restart
 - Playback state tracking
+- Playback position tracking
+
+---
+
+# INTERRUPTION BEHAVIOR
+
+Response Audio Playing
+
+↓
+
+User Speaks
+
+↓
+
+VAD Detects Speech
+
+↓
+
+Pause Playback
+
+↓
+
+Play please_wait.wav
+
+↓
+
+Wait For Silence
+
+↓
+
+Resume Original Playback
+
+↓
+
+Continue Conversation
+
+Playback must resume from the exact paused position.
+
+No synthesized speech may be used.
 
 ---
 
@@ -555,151 +752,186 @@ File:
 
 utils/conversation_manager.py
 
-Create a finite-state machine.
+Responsibilities:
 
-States:
+- State transitions
+- Wake word activation
+- Language context
+- Scenario matching
+- Timeout handling
+- Playback coordination
 
-IDLE
+The conversation manager controls the FSM.
+
+---
+
+# EVENT DRIVEN REQUIREMENTS
+
+The system must use an internal Event Bus.
+
+All workflows are event driven.
+
+Examples:
 
 FACE_RECOGNIZED
 
+WAKE_WORD_DETECTED
+
+SCENARIO_MATCHED
+
+PLAYBACK_STARTED
+
+INTERRUPTION_DETECTED
+
+TIMEOUT_OCCURRED
+
+Direct service-to-service calls should be avoided.
+
+---
+
+# STATE MACHINE REQUIREMENTS
+
+The robot must use a Finite State Machine.
+
+Required States:
+
+IDLE
+
+FACE_ENROLLMENT
+
+FACE_DETECTED
+
+FACE_RECOGNIZED
+
+GREETING
+
 WAITING_FOR_WAKE_WORD
+
+LANGUAGE_SELECTION
 
 CONVERSATION_ACTIVE
 
-PLAYING_RESPONSE
+PLAYING_AUDIO
 
 INTERRUPTED
 
 TIMEOUT
 
-Responsibilities:
+RETURN_TO_IDLE
 
+All transitions must be logged.
+
+---
+
+# LOGGING REQUIREMENTS
+
+Log:
+
+- Startup
+- Shutdown
+- Camera initialization
+- Model loading
+- Enrollment
+- Recognition
+- Wake words
+- Transcription
+- Scenario matching
+- Audio playback
+- Interruptions
+- Timeouts
 - State transitions
-- Wake word activation
-- Dialog matching
-- Timeout control
-- Language context
-- Playback coordination
+- Errors
+- Warnings
 
 ---
 
-# CONVERSATION BEHAVIOR
+# TESTING REQUIREMENTS
 
-Example:
+Unit Tests
 
-User appears
+- Scenario Matching
+- Text Normalization
+- FSM Transitions
 
-↓
+Integration Tests
 
-Face recognized
+- End-to-End Workflow
 
-↓
+Manual Demonstration Tests
 
-Greeting audio
-
-↓
-
-System waits
-
-User:
-
-"Hello robot"
-
-↓
-
-Wake word detected
-
-↓
-
-Conversation activated
-
-User:
-
-"What is your name?"
-
-↓
-
-Whisper transcription
-
-↓
-
-Scenario match
-
-↓
-
-Play name.wav
-
-↓
-
-User interrupts
-
-↓
-
-Pause playback
-
-↓
-
-Notify:
-
-"Please wait."
-
-↓
-
-User becomes silent
-
-↓
-
-Resume playback
-
-↓
-
-Conversation continues
-
-↓
-
-Timeout
-
-↓
-
-Return to wake word listening
+- Face recognition
+- Greeting
+- Wake word
+- Conversation activation
+- Scenario matching
+- Playback
+- Interruption
+- Resume
+- Timeout
 
 ---
 
-# SOFTWARE QUALITY REQUIREMENTS
+# DEPLOYMENT REQUIREMENTS
 
-Generate production-grade code.
+Local deployment only.
 
-Requirements:
+Application must:
 
-- Python type hints
-- Modular architecture
-- SOLID principles
-- Clean code
-- Logging
-- Error handling
-- Thread safety
-- Session state management
-- No hard-coded values
-- Configuration-driven behavior
+- Start successfully
+- Load all models
+- Open webcam
+- Open microphone
+- Initialize services
+- Enter IDLE state
+
+No cloud dependencies allowed.
 
 ---
 
-# OUTPUT REQUIREMENTS
+# DEFINITION OF DONE
 
-Generate:
+The project is complete only when:
 
-1. Complete folder structure.
-2. Complete source code for every file.
-3. requirements.txt.
-4. README.md.
-5. JSON configuration files.
-6. Streamlit pages.
-7. Utility modules.
-8. State machine implementation.
-9. Logging framework.
-10. Deployment instructions.
+✓ Application starts
 
-Do not produce partial implementations.
+✓ Webcam opens
 
-Generate a complete working project.
+✓ Microphone opens
+
+✓ Face enrollment works
+
+✓ Face recognition works
+
+✓ Greeting audio plays
+
+✓ Wake word detection works
+
+✓ Language selection works
+
+✓ Whisper transcription works
+
+✓ Scenario matching works
+
+✓ Correct audio response plays
+
+✓ VAD interruption detection works
+
+✓ Playback pauses
+
+✓ Interruption audio plays
+
+✓ Playback resumes
+
+✓ Timeout works
+
+✓ Return to idle works
+
+✓ Dashboard works
+
+✓ Scenario management works
+
+✓ Settings page works
+
+✓ End-to-end demonstration succeeds
+
+The final output must be a complete runnable offline conversational robot.

@@ -1,113 +1,259 @@
-# Acceptance Criteria
+# ACCEPTANCE TESTS
 
-The project is complete only if all items pass.
+## Purpose
 
----
+These acceptance tests determine whether the project is complete.
 
-## Startup
-
-[ ] Application starts
-
-[ ] Configuration loads
-
-[ ] Logger initializes
-
-[ ] Webcam opens
-
-[ ] Microphone initializes
+A feature is considered complete only if its acceptance criteria pass.
 
 ---
 
-## Face Recognition
+# Startup Tests
 
-[ ] Face enrollment works
+[ ] Application starts successfully
 
-[ ] Face storage works
+[ ] Settings load successfully
 
-[ ] Registered users displayed
+[ ] Logging initializes successfully
+
+[ ] Webcam initializes successfully
+
+[ ] Microphone initializes successfully
+
+[ ] Event Bus initializes successfully
+
+[ ] State Machine initializes successfully
+
+[ ] Application enters IDLE state
+
+---
+
+# Face Enrollment Tests
+
+[ ] Webcam capture works
+
+[ ] Image upload works
+
+[ ] Face saved successfully
+
+[ ] User appears in enrollment list
+
+---
+
+# Face Recognition Tests
+
+[ ] Faces load successfully
 
 [ ] Face detection works
 
 [ ] Face recognition works
 
+[ ] Multiple users supported
+
+[ ] Confidence score returned
+
 ---
 
-## Greeting
+# Greeting Tests
 
-[ ] User greeted automatically
+[ ] Greeting triggers automatically
 
 [ ] Greeting audio plays
 
+[ ] FSM transitions correctly
+
 ---
 
-## Speech
+# Wake Word Tests
 
 [ ] Wake word detection works
 
+[ ] Invalid wake words rejected
+
+[ ] Wake word events generated
+
+---
+
+# Language Tests
+
+[ ] English supported
+
+[ ] Amharic supported
+
+[ ] Arabic supported
+
+[ ] Language selection updates context
+
+---
+
+# Whisper Tests
+
+[ ] Whisper loads successfully
+
+[ ] Whisper loads only once
+
+[ ] Speech transcribes correctly
+
 [ ] Language detection works
 
-[ ] Whisper transcription works
+---
+
+# Scenario Engine Tests
+
+[ ] Scenario file loads
+
+[ ] Scenario validation works
+
+[ ] Text normalization works
+
+[ ] Exact matching works
+
+[ ] Keyword matching works
+
+[ ] Fallback works
 
 ---
 
-## Dialog
-
-[ ] Scenario matching works
-
-[ ] Correct dialog found
-
-[ ] Correct audio selected
-
----
-
-## Playback
+# Playback Tests
 
 [ ] WAV playback works
 
 [ ] MP3 playback works
 
-[ ] Pause works
+[ ] Playback state tracked
 
-[ ] Resume works
-
-[ ] Restart works
+[ ] Playback position tracked
 
 ---
 
-## VAD
+# VAD Tests
 
-[ ] User interruption detected
+[ ] Speech detected
 
-[ ] Playback paused
+[ ] Silence detected
 
-[ ] Interruption message played
+[ ] Interruption detected
 
-[ ] Playback resumed
+[ ] Interruption event generated
 
 ---
 
-## FSM
+# Interruption Tests
+
+[ ] Response pauses
+
+[ ] Interruption audio plays
+
+[ ] Silence resumes playback
+
+[ ] Playback continues from previous position
+
+---
+
+# FSM Tests
+
+[ ] IDLE works
+
+[ ] FACE_RECOGNIZED works
+
+[ ] GREETING works
+
+[ ] WAITING_FOR_WAKE_WORD works
+
+[ ] CONVERSATION_ACTIVE works
+
+[ ] PLAYING_AUDIO works
+
+[ ] INTERRUPTED works
+
+[ ] TIMEOUT works
+
+[ ] RETURN_TO_IDLE works
+
+[ ] Invalid transitions rejected
 
 [ ] State transitions logged
 
-[ ] Timeout works
+---
 
-[ ] Return to idle works
+# Dashboard Tests
+
+[ ] Dashboard loads
+
+[ ] Webcam feed visible
+
+[ ] Logs visible
+
+[ ] Status cards visible
+
+[ ] System state visible
 
 ---
 
-## Dashboard
+# Scenario Management Tests
 
-[ ] Dashboard works
+[ ] Scenario creation works
 
-[ ] Face enrollment page works
+[ ] Scenario editing works
 
-[ ] Scenario management works
+[ ] Scenario deletion works
 
-[ ] Settings page works
+[ ] Audio upload works
 
 ---
 
-## Demonstration
+# Settings Tests
 
-[ ] Complete workflow successful
+[ ] Settings load
+
+[ ] Settings save
+
+[ ] Whisper model changes persist
+
+[ ] VAD settings persist
+
+---
+
+# End-To-End Demonstration Tests
+
+[ ] User enrolled
+
+[ ] User recognized
+
+[ ] Greeting plays
+
+[ ] Wake word detected
+
+[ ] Language selected
+
+[ ] Question asked
+
+[ ] Scenario matched
+
+[ ] Response played
+
+[ ] Interruption detected
+
+[ ] Interruption response played
+
+[ ] Original playback resumed
+
+[ ] Timeout occurs
+
+[ ] Return to idle
+
+---
+
+# Final Acceptance
+
+Project is accepted only when ALL checkboxes pass.
+
+No TODOs.
+
+No placeholders.
+
+No mock implementations.
+
+No incomplete workflows.
+
+The complete demonstration must execute successfully from beginning to end.

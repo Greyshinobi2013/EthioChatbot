@@ -1,50 +1,94 @@
-# Demonstration Script
+# DEMONSTRATION SCRIPT
 
-This script represents the required end-to-end demonstration.
+## Purpose
+
+This file defines the demonstration workflow.
+
+The project is considered successful only when every step can be performed from beginning to end.
 
 ---
 
-## Step 1
+# Step 1
 
-Start Application
+Launch Application
 
 Expected Result:
 
-Dashboard loads successfully.
+- Application starts
+- Configuration loads
+- Logging starts
+- Webcam initializes
+- Microphone initializes
+- FSM enters IDLE
 
-System enters IDLE state.
+PASS if application remains running.
 
 ---
 
-## Step 2
+# Step 2
 
-Present Registered User
+Enroll User Face
+
+Action:
+
+- Open Enrollment Page
+- Capture face
+- Save user
 
 Expected Result:
 
-Face detected.
+- Face stored successfully
+- User appears in enrolled users list
 
-Face recognized.
-
-User name displayed.
+PASS if user enrollment succeeds.
 
 ---
 
-## Step 3
+# Step 3
+
+Recognize User
+
+Action:
+
+- Present enrolled face to webcam
+
+Expected Result:
+
+- Face detected
+- Face recognized
+- User name displayed
+
+PASS if recognition succeeds.
+
+---
+
+# Step 4
 
 Automatic Greeting
 
 Expected Result:
 
-Greeting audio plays automatically.
+- Greeting audio automatically plays
 
-System enters WAITING_FOR_WAKE_WORD.
+PASS if greeting plays without user interaction.
 
 ---
 
-## Step 4
+# Step 5
 
-Say Wake Word
+Wait For Wake Word
+
+Expected Result:
+
+- FSM enters WAITING_FOR_WAKE_WORD
+
+PASS if robot is listening.
+
+---
+
+# Step 6
+
+Speak Wake Word
 
 Example:
 
@@ -52,15 +96,16 @@ Hello Robot
 
 Expected Result:
 
-Wake word detected.
+- Wake word detected
+- Wake word event generated
 
-LANGUAGE_SELECTION state entered.
+PASS if wake word is recognized.
 
 ---
 
-## Step 5
+# Step 7
 
-Select Language
+Language Selection
 
 Example:
 
@@ -68,15 +113,16 @@ English
 
 Expected Result:
 
-Language context set.
+- Language set to English
+- FSM enters CONVERSATION_ACTIVE
 
-Conversation activated.
+PASS if language state updates.
 
 ---
 
-## Step 6
+# Step 8
 
-Ask Question
+Ask a Question
 
 Example:
 
@@ -84,50 +130,110 @@ What is your name?
 
 Expected Result:
 
-Whisper transcription.
+- Whisper transcribes speech
+- Scenario matched
+- name.wav selected
 
-Scenario match.
-
-Correct audio response.
+PASS if correct scenario is found.
 
 ---
 
-## Step 7
+# Step 9
 
-Interrupt Playback
-
-Speak while audio is playing.
+Play Response
 
 Expected Result:
 
-Playback paused.
+- Audio starts
 
-Interruption audio played.
+PASS if correct prerecorded response plays.
 
 ---
 
-## Step 8
+# Step 10
+
+Interrupt Robot
+
+Action:
+
+Speak while response is playing.
+
+Expected Result:
+
+- VAD detects speech
+- Playback pauses
+- please_wait.wav plays
+
+PASS if interruption is detected.
+
+---
+
+# Step 11
 
 Become Silent
 
 Expected Result:
 
-Playback resumes from previous location.
+- Silence detected
+- Original response resumes
+
+PASS if resume occurs from previous position.
 
 ---
 
-## Step 9
+# Step 12
 
 Wait For Timeout
 
 Expected Result:
 
-Conversation timeout occurs.
+- Timeout reached
+- FSM transitions to TIMEOUT
 
-Return to idle state.
+PASS if timeout occurs.
 
 ---
 
-## Success Criteria
+# Step 13
 
-Entire workflow completes without restarting the application.
+Return To Idle
+
+Expected Result:
+
+- RETURN_TO_IDLE state entered
+- IDLE state entered
+
+PASS if robot returns to listening mode.
+
+---
+
+# Demonstration Success Criteria
+
+The demonstration is successful only if:
+
+✓ Face enrollment works
+
+✓ Face recognition works
+
+✓ Greeting works
+
+✓ Wake word works
+
+✓ Language selection works
+
+✓ Whisper works
+
+✓ Scenario matching works
+
+✓ Audio playback works
+
+✓ Interruption handling works
+
+✓ Playback resumes
+
+✓ Timeout works
+
+✓ Return to idle works
+
+✓ Application remains stable throughout demonstration
+``

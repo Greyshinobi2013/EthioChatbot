@@ -1,0 +1,18 @@
+2026-07-16 03:24:22,210 | INFO     | robot | Logging initialized. Log file: /home/tech_shinobi/Documents/EthioChatbot/logs/app.log
+2026-07-16 03:24:22,213 | INFO     | robot.app | SYSTEM_STARTUP begin
+2026-07-16 03:24:22,213 | INFO     | robot.state_manager | Configuration loaded from /home/tech_shinobi/Documents/EthioChatbot/config/settings.json
+2026-07-16 03:24:22,214 | INFO     | robot.app | Configuration loaded: whisper_model=medium, camera_index=0, vad_aggressiveness=2
+2026-07-16 03:24:22,214 | INFO     | robot.app | Shared application state initialized
+2026-07-16 03:24:22,214 | INFO     | robot.app | Service bootstrap: 0 service(s) registered
+2026-07-16 03:24:22,214 | INFO     | robot.app | No service threads to start (Milestone 1)
+2026-07-16 03:24:22,214 | INFO     | robot.state_manager | State transition: IDLE -> IDLE
+2026-07-16 03:24:22,214 | INFO     | robot.app | SYSTEM_STARTUP complete
+2026-07-16 05:39:15,493 | INFO     | robot | Logging initialized. Log file: /home/tech_shinobi/Documents/EthioChatbot/logs/app.log
+2026-07-16 05:39:15,502 | INFO     | robot.app | SYSTEM_STARTUP begin
+2026-07-16 05:39:15,504 | INFO     | robot.state_manager | Configuration loaded from /home/tech_shinobi/Documents/EthioChatbot/config/settings.json
+2026-07-16 05:39:15,505 | INFO     | robot.app | Configuration loaded: whisper_model=medium, camera_index=0, vad_aggressiveness=2
+2026-07-16 05:39:15,505 | INFO     | robot.app | Shared application state initialized
+2026-07-16 05:39:15,506 | INFO     | robot.app | Service bootstrap: 0 service(s) registered
+2026-07-16 05:39:15,507 | INFO     | robot.app | No service threads to start (Milestone 1)
+2026-07-16 05:39:15,507 | INFO     | robot.state_manager | State transition: IDLE -> IDLE
+2026-07-16 05:39:15,508 | INFO     | robot.app | SYSTEM_STARTUP complete
