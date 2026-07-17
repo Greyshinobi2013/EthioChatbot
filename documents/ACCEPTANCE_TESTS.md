@@ -390,3 +390,249 @@ when:
 [ ] Amharic speech recognized
 
 [ ] Arabic speech recognized
+
+---
+
+# SECTION 10
+
+# Scenario Matching Tests
+
+## Scenario Loading
+
+[ ] dialog_config.json loads at startup
+
+[ ] English scenarios cached into english_lookup
+
+[ ] Amharic scenarios cached into amharic_lookup
+
+[ ] Arabic scenarios cached into arabic_lookup
+
+[ ] Invalid scenario entries logged and skipped
+
+---
+
+## Text Normalization
+
+[ ] Input converted to lowercase
+
+[ ] Punctuation removed
+
+[ ] Duplicate spaces collapsed
+
+[ ] Leading/trailing whitespace trimmed
+
+---
+
+## Matching
+
+[ ] Exact match selects correct scenario
+
+[ ] Keyword match selects correct scenario when exact match fails
+
+[ ] Only the active language's lookup is searched
+
+[ ] No matching scenario triggers fallback
+
+---
+
+## Fallback
+
+[ ] unknown_question.wav plays when no scenario matches
+
+[ ] FALLBACK_SCENARIO_SELECTED event generated
+
+[ ] SCENARIO_NOT_FOUND event generated before fallback
+
+---
+
+# SECTION 11
+
+# Audio Playback Tests
+
+## Playback Control
+
+[ ] play_audio() starts playback
+
+[ ] pause_audio() pauses playback
+
+[ ] resume_audio() resumes playback
+
+[ ] Playback position tracked accurately
+
+---
+
+## Format Support
+
+[ ] WAV playback works
+
+[ ] MP3 playback works
+
+---
+
+## Playback Events
+
+[ ] PLAYBACK_STARTED generated on start
+
+[ ] PLAYBACK_FINISHED generated on completion
+
+[ ] Correct audio file selected per scenario match
+
+---
+
+# SECTION 12
+
+# VAD & Interruption Tests
+
+## Interruption Detection
+
+[ ] Speech during playback detected by VAD
+
+[ ] INTERRUPTION_DETECTED event generated
+
+[ ] Playback pauses on interruption
+
+[ ] please_wait.wav plays during interruption
+
+---
+
+## Resume After Interruption
+
+[ ] Silence detected after interruption
+
+[ ] INTERRUPTION_CLEARED event generated
+
+[ ] Original response resumes from stored position
+
+[ ] Original response does not restart from the beginning
+
+---
+
+# SECTION 13
+
+# Timeout Tests
+
+## Conversation Timeout
+
+[ ] TIMEOUT_OCCURRED generated after 30 seconds of inactivity
+
+[ ] Conversation context cleared on timeout
+
+[ ] Language context cleared on timeout
+
+[ ] FSM transitions to FACE_LOST_CHECK then WAITING_FOR_WAKE_WORD when users remain visible
+
+---
+
+# SECTION 14
+
+# Face Persistence & Face Lost Tests
+
+## Persistence
+
+[ ] last_seen updates continuously while a user is visible
+
+[ ] last_seen stops updating once a user disappears
+
+---
+
+## Partial Face Loss
+
+[ ] FACE_LOST generated for a user who leaves the frame
+
+[ ] Active user list updates to remove only the lost user
+
+[ ] Robot remains in WAITING_FOR_WAKE_WORD when at least one recognized user remains visible
+
+[ ] No duplicate greeting occurs for users who remain visible
+
+---
+
+## Complete Face Loss
+
+[ ] ALL_USERS_LOST generated when no recognized users remain
+
+[ ] FSM transitions FACE_LOST_CHECK → RETURN_TO_IDLE → IDLE
+
+[ ] No manual intervention required to reach IDLE
+
+---
+
+# SECTION 15
+
+# Return To Idle & Re-Entry Tests
+
+## Return To Idle
+
+[ ] Active users cleared on RETURN_TO_IDLE
+
+[ ] Language context reset on RETURN_TO_IDLE
+
+[ ] Playback state reset on RETURN_TO_IDLE
+
+[ ] IDLE_ENTERED event generated
+
+---
+
+## Re-Entry
+
+[ ] Recognition resumes correctly after returning to IDLE
+
+[ ] Greeting workflow restarts when a recognized user reappears
+
+[ ] System behaves consistently across repeated IDLE cycles
+
+---
+
+# SECTION 16
+
+# Raspberry Pi Performance Tests
+
+## Resource Usage
+
+[ ] Application runs on Raspberry Pi 4 (8GB RAM)
+
+[ ] Camera runs at 640x480
+
+[ ] Recognition runs every 10th frame, detection every frame
+
+[ ] Whisper base model used
+
+[ ] Memory usage remains stable during extended runtime (no unbounded growth)
+
+[ ] Only latest_frame and latest_audio_chunk retained (no frame/audio history buffers)
+
+---
+
+## Responsiveness
+
+[ ] Wake word detection responds within an acceptable delay on Pi hardware
+
+[ ] Scenario matching responds within an acceptable delay on Pi hardware
+
+[ ] Playback starts without noticeable lag on Pi hardware
+
+---
+
+# SECTION 17
+
+# End-To-End Demonstration Tests
+
+Reference:
+
+DEMO_SCRIPT.md
+
+## Full Workflow
+
+[ ] Complete demonstration workflow (Steps 1-20 of DEMO_SCRIPT.md) succeeds without application restart
+
+[ ] Complete demonstration workflow succeeds without manual intervention
+
+[ ] Complete demonstration workflow succeeds without service crashes
+
+[ ] Complete demonstration workflow succeeds without missing audio
+
+[ ] Complete demonstration workflow succeeds without failed state transitions
+
+[ ] Complete demonstration workflow succeeds without failed language sessions
+
+[ ] Demonstration runs entirely offline (no network access during execution)
