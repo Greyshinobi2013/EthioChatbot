@@ -159,14 +159,21 @@ class CameraService:
         with self._frame_lock:
             self._latest_frame = frame_bgr
 
-        face_count = self._recognizer.detect_face_count(frame_bgr)
+        # Detect once per frame and reuse the result for both the face
+        # count and (on recognition-interval frames) recognition,
+        # rather than detecting twice -- the redundant second pass
+        # previously repeated the most expensive per-frame work
+        # (color conversion + HOG detection) on exactly the frames
+        # where recognition also runs.
+        rgb_image, detections = self._recognizer.detect_faces(frame_bgr)
+        face_count = len(detections)
         has_face = face_count > 0
         if has_face and not self._had_face_last_frame:
             self._bus.publish("FACE_DETECTED", {"face_count": face_count})
         self._had_face_last_frame = has_face
 
         if has_face and self._frame_count % self._recognition_interval == 0:
-            outcome = self._recognizer.recognize(frame_bgr)
+            outcome = self._recognizer.recognize_detected(rgb_image, detections)
             self._handle_recognition(outcome)
 
     def _handle_recognition(self, outcome: RecognitionOutcome) -> None:

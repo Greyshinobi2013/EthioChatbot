@@ -105,13 +105,38 @@ class FaceRecognizer:
         """Number of enrolled users with a usable cached embedding."""
         return len(self._embeddings)
 
+    def detect_faces(self, frame_bgr: np.ndarray) -> Tuple[np.ndarray, list]:
+        """Run face detection once, returning the RGB frame and raw detections.
+
+        Intended to run every frame per README's optimization guidance
+        ("Detect Every Frame"). Callers that need both a face count
+        (every frame) and full recognition (every Nth frame) on the
+        same frame should call this once and pass the result to
+        recognize_detected(), rather than calling detect_face_count()
+        and recognize() separately -- each of those repeats the color
+        conversion and detector pass on its own, which wastes a full
+        detection pass (and its RGB frame allocation) on exactly the
+        frames where the most expensive work already happens.
+
+        Args:
+            frame_bgr: An OpenCV-style BGR camera frame.
+
+        Returns:
+            (rgb_image, detections): the RGB conversion of frame_bgr,
+            and the list of dlib face rectangles found in it.
+        """
+        rgb_image = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        detections = self._detector(rgb_image, 0)
+        return rgb_image, detections
+
     def detect_face_count(self, frame_bgr: np.ndarray) -> int:
         """Cheaply count faces in a frame without computing embeddings.
 
-        Intended to run every frame per README's optimization
-        guidance ("Detect Every Frame"), unlike recognize() which is
-        expensive and should run only every Nth frame ("Recognize
-        Every 10 Frames").
+        Convenience wrapper around detect_faces() for callers that
+        only need a count and won't also call recognize() on the same
+        frame. If both are needed on the same frame, call
+        detect_faces() once instead and pass its result to
+        recognize_detected() to avoid a redundant detection pass.
 
         Args:
             frame_bgr: An OpenCV-style BGR camera frame.
@@ -119,11 +144,16 @@ class FaceRecognizer:
         Returns:
             Number of faces detected.
         """
-        rgb_image = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        return len(self._detector(rgb_image, 0))
+        _, detections = self.detect_faces(frame_bgr)
+        return len(detections)
 
     def recognize(self, frame_bgr: np.ndarray) -> RecognitionOutcome:
         """Detect faces in a frame and match each against enrolled users.
+
+        Convenience wrapper around detect_faces() + recognize_detected()
+        for standalone use. If detect_face_count() was already called
+        on this same frame, call recognize_detected() directly with
+        its result instead, to avoid detecting twice.
 
         Args:
             frame_bgr: An OpenCV-style BGR camera frame.
@@ -132,9 +162,22 @@ class FaceRecognizer:
             A RecognitionOutcome listing recognized users and
             unknown-face confidences.
         """
-        rgb_image = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        detections = self._detector(rgb_image, 0)
+        rgb_image, detections = self.detect_faces(frame_bgr)
+        return self.recognize_detected(rgb_image, detections)
 
+    def recognize_detected(self, rgb_image: np.ndarray, detections: list) -> RecognitionOutcome:
+        """Match already-detected faces against enrolled users.
+
+        Args:
+            rgb_image: The RGB frame detections were found in (from
+                detect_faces()).
+            detections: dlib face rectangles, as returned by
+                detect_faces().
+
+        Returns:
+            A RecognitionOutcome listing recognized users and
+            unknown-face confidences.
+        """
         best_matches: Dict[str, RecognitionMatch] = {}
         unknown_confidences: List[float] = []
 
