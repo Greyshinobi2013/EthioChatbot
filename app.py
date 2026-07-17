@@ -3,8 +3,14 @@
 Milestone 1 established configuration loading, centralized logging,
 shared application state, and a service registration framework.
 Milestone 2 adds the Event Bus and Finite State Machine backbone.
-Camera, audio, Whisper, VAD, and playback services are populated by
-later milestones via the ServiceRegistry.
+Milestones 3-10 built the individual services (face enrollment,
+camera/recognition, greeting, Whisper, scenario matching, playback,
+VAD/interruption, conversation orchestration). Milestone 11 adds the
+Streamlit administration/monitoring pages, which need one running
+instance of the full system shared across every page and every
+Streamlit rerun -- start_full_system()/get_running_application()
+below provide that, without changing the plain `python app.py` CLI
+path's foundation-only behavior (main() still only calls startup()).
 
 Per ARCHITECTURE.md's Startup Sequence, this module loads
 configuration, initializes logging, initializes the event bus,
@@ -18,14 +24,24 @@ import logging
 import signal
 import sys
 import types
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import List, Optional, Protocol, runtime_checkable
 
+import streamlit as st
+
+from utils.camera_service import CameraService
+from utils.conversation_manager import ConversationManager
 from utils.event_bus import EventBus
+from utils.face_recognition import FaceRecognizer
 from utils.fsm import FiniteStateMachine
+from utils.greeting_service import GreetingService
 from utils.logger import configure_logging, get_logger
+from utils.playback import PlaybackService
+from utils.scenario_engine import ScenarioEngine
 from utils.state_manager import StateManager
+from utils.vad_handler import VADHandler
+from utils.whisper_utils import WhisperService
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "settings.json"
@@ -111,6 +127,27 @@ def load_configuration(config_path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         return AppConfig.from_dict(raw_config)
     except (TypeError, KeyError) as exc:
         raise ConfigurationError(f"Configuration values are invalid: {exc}") from exc
+
+
+def save_configuration(config: AppConfig, config_path: Path = DEFAULT_CONFIG_PATH) -> None:
+    """Persist an AppConfig back to config/settings.json.
+
+    Used by pages/4_Settings.py. Changes take effect the next time the
+    application starts -- the running engine's services were already
+    constructed from whatever configuration was in effect at startup.
+
+    Args:
+        config: The configuration to save.
+        config_path: Path to write to.
+
+    Raises:
+        ConfigurationError: if the file cannot be written.
+    """
+    try:
+        with config_path.open("w", encoding="utf-8") as config_file:
+            json.dump(asdict(config), config_file, indent=2)
+    except OSError as exc:
+        raise ConfigurationError(f"Could not write configuration file: {config_path}") from exc
 
 
 @runtime_checkable
@@ -201,6 +238,17 @@ class Application:
         self.registry: Optional[ServiceRegistry] = None
         self.logger: logging.Logger = get_logger(__name__)
 
+        # Populated by start_full_system() only (not by startup()/main()'s
+        # CLI path), for Streamlit pages to read from directly.
+        self.recognizer: Optional[FaceRecognizer] = None
+        self.camera: Optional[CameraService] = None
+        self.greeting: Optional[GreetingService] = None
+        self.whisper: Optional[WhisperService] = None
+        self.scenario_engine: Optional[ScenarioEngine] = None
+        self.playback: Optional[PlaybackService] = None
+        self.vad: Optional[VADHandler] = None
+        self.conversation: Optional[ConversationManager] = None
+
     def startup(self) -> None:
         """Run the application startup lifecycle.
 
@@ -244,6 +292,77 @@ class Application:
         if self.registry is not None:
             self.registry.stop_all()
         self.logger.info("SYSTEM_SHUTDOWN complete.")
+
+    def start_full_system(self) -> None:
+        """Build, register, and start every robot service.
+
+        Extends startup() (foundation only: config/logging/event
+        bus/state/FSM/empty registry) with the full pipeline built
+        across Milestones 3-10: face recognition, camera, greeting,
+        Whisper, scenario matching, playback, VAD/interruption, and
+        conversation orchestration. Used by the Streamlit dashboard's
+        cached singleton (see get_running_application() below); the
+        plain `python app.py` CLI entry point (main()) intentionally
+        stays foundation-only, so it keeps working without camera or
+        microphone hardware and without paying Whisper's load cost.
+        """
+        self.startup()
+        assert self.event_bus is not None and self.state is not None and self.registry is not None
+        assert self.config is not None
+
+        self.recognizer = FaceRecognizer()
+        self.camera = CameraService(
+            self.event_bus,
+            self.state,
+            self.recognizer,
+            camera_index=self.config.camera_index,
+            camera_width=self.config.camera_width,
+            camera_height=self.config.camera_height,
+            recognition_interval=self.config.recognition_interval,
+            face_lost_timeout=self.config.face_lost_timeout,
+        )
+        self.greeting = GreetingService(self.event_bus, self.state)
+        self.whisper = WhisperService(self.event_bus, self.state, model_size=self.config.whisper_model)
+        self.scenario_engine = ScenarioEngine(self.event_bus, self.state)
+        self.playback = PlaybackService(self.event_bus)
+        self.vad = VADHandler(
+            self.event_bus, self.state, self.playback, aggressiveness=self.config.vad_aggressiveness
+        )
+        self.conversation = ConversationManager(
+            self.event_bus, self.state, self.playback, timeout_seconds=self.config.conversation_timeout
+        )
+
+        for service in (
+            self.camera,
+            self.greeting,
+            self.whisper,
+            self.scenario_engine,
+            self.playback,
+            self.vad,
+            self.conversation,
+        ):
+            self.registry.register(service)
+
+        self.registry.start_all()
+        self.logger.info("Full system started: all services registered and running")
+
+
+@st.cache_resource(show_spinner="Starting EthioChatbot V2 engine...")
+def get_running_application() -> Application:
+    """Return the single, process-wide running Application instance.
+
+    Cached via Streamlit's st.cache_resource, so it is created exactly
+    once per server process and reused across every page and every
+    Streamlit rerun. This is the singleton pattern decided for this
+    project: Streamlit reruns the whole script on each interaction,
+    but background services (camera thread, greeting thread, etc.)
+    must not be restarted on every rerun -- every pages/*.py module
+    that needs the live engine calls this instead of constructing its
+    own Application.
+    """
+    app = Application()
+    app.start_full_system()
+    return app
 
 
 def main() -> int:

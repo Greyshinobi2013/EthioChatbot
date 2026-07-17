@@ -89,7 +89,15 @@ class ScenarioEngine:
     english_lookup, amharic_lookup, arabic_lookup -- that are reused
     for every match. No JSON is re-read, and no embeddings or search
     index of any kind is built.
+
+    Implements app.py's Service protocol (name, start, stop) so it can
+    be registered with the ServiceRegistry; all of its real work
+    happens at construction time (loading scenarios) and via its
+    optional TRANSCRIPTION_READY subscription, so start()/stop() are
+    lightweight lifecycle hooks.
     """
+
+    name = "scenario_engine"
 
     def __init__(
         self,
@@ -131,6 +139,15 @@ class ScenarioEngine:
 
         if self._bus is not None:
             self._bus.subscribe("TRANSCRIPTION_READY", self._on_transcription_ready)
+
+    def start(self) -> None:
+        """Lifecycle hook for ServiceRegistry compatibility; scenarios are already loaded."""
+        logger.info("Scenario engine ready (%d/%d/%d english/amharic/arabic scenarios)",
+                    len(self.english_lookup), len(self.amharic_lookup), len(self.arabic_lookup))
+
+    def stop(self) -> None:
+        """Lifecycle hook for ServiceRegistry compatibility; no resources to release."""
+        logger.info("Scenario engine stopped")
 
     def load_scenarios(self) -> None:
         """Load dialog_config.json and rebuild the per-language lookup caches.
@@ -193,6 +210,119 @@ class ScenarioEngine:
             return None
 
         return Scenario(user_text=user_text, normalized_text=normalized, response_audio=response_audio)
+
+    def all_scenarios(self, language: str) -> List[Scenario]:
+        """Return all currently loaded scenarios for language, in file order.
+
+        Used by pages/3_Manage_Scenarios.py to list existing entries.
+
+        Raises:
+            ValueError: if language is not supported.
+        """
+        if language not in self._scenario_lists:
+            raise ValueError(f"Unsupported language: {language}")
+        return list(self._scenario_lists[language])
+
+    def add_or_update_scenario(self, language: str, user_text: str, response_audio: str) -> None:
+        """Add a new scenario, or update the existing one with the same normalized text.
+
+        Persists to dialog_config.json and reloads the in-memory
+        lookup caches. Used by pages/3_Manage_Scenarios.py so scenario
+        administration contains no business logic of its own.
+
+        Args:
+            language: One of SUPPORTED_LANGUAGES.
+            user_text: The scenario phrase.
+            response_audio: Path to the response WAV, relative to the
+                project root (e.g. "audio/english/name.wav").
+
+        Raises:
+            ValueError: if language is unsupported, user_text/
+                response_audio is blank, or response_audio does not
+                exist on disk.
+        """
+        if language not in SUPPORTED_LANGUAGES:
+            raise ValueError(f"Unsupported language: {language}")
+        if not user_text.strip():
+            raise ValueError("user_text must not be empty")
+        if not response_audio.strip():
+            raise ValueError("response_audio must not be empty")
+        if not (PROJECT_ROOT / response_audio).exists():
+            raise ValueError(f"response_audio file does not exist: {response_audio}")
+
+        raw_config = self._load_raw_config()
+        normalized_target = normalize_text(user_text)
+        entries = raw_config[language]
+
+        updated = False
+        for entry in entries:
+            if normalize_text(entry.get("user_text", "")) == normalized_target:
+                entry["user_text"] = user_text
+                entry["response_audio"] = response_audio
+                updated = True
+                break
+        if not updated:
+            entries.append({"user_text": user_text, "response_audio": response_audio})
+
+        self._save_raw_config(raw_config)
+        self.load_scenarios()
+        logger.info(
+            "Scenario %s for %s: '%s' -> %s",
+            "updated" if updated else "added",
+            language,
+            user_text,
+            response_audio,
+        )
+
+    def delete_scenario(self, language: str, user_text: str) -> bool:
+        """Remove a scenario matched by its normalized user_text.
+
+        Persists to dialog_config.json and reloads the in-memory
+        lookup caches.
+
+        Args:
+            language: One of SUPPORTED_LANGUAGES.
+            user_text: The scenario phrase to remove (matched after
+                normalization, so casing/punctuation don't matter).
+
+        Returns:
+            True if a scenario was removed, False if none matched.
+
+        Raises:
+            ValueError: if language is not supported.
+        """
+        if language not in SUPPORTED_LANGUAGES:
+            raise ValueError(f"Unsupported language: {language}")
+
+        raw_config = self._load_raw_config()
+        normalized_target = normalize_text(user_text)
+        entries = raw_config[language]
+        remaining = [entry for entry in entries if normalize_text(entry.get("user_text", "")) != normalized_target]
+
+        removed = len(remaining) != len(entries)
+        if removed:
+            raw_config[language] = remaining
+            self._save_raw_config(raw_config)
+            self.load_scenarios()
+            logger.info("Scenario deleted for %s: '%s'", language, user_text)
+        return removed
+
+    def _load_raw_config(self) -> dict:
+        """Read dialog_config.json as a plain dict, defaulting missing language keys to []."""
+        if not self._dialog_config_path.exists():
+            raw_config: dict = {}
+        else:
+            with self._dialog_config_path.open("r", encoding="utf-8") as handle:
+                raw_config = json.load(handle)
+        for language in SUPPORTED_LANGUAGES:
+            raw_config.setdefault(language, [])
+        return raw_config
+
+    def _save_raw_config(self, raw_config: dict) -> None:
+        """Write raw_config back to dialog_config.json."""
+        self._dialog_config_path.parent.mkdir(parents=True, exist_ok=True)
+        with self._dialog_config_path.open("w", encoding="utf-8") as handle:
+            json.dump(raw_config, handle, indent=2, ensure_ascii=False)
 
     def match(self, text: str, language: str) -> Optional[ScenarioMatch]:
         """Match user speech against the given language's scenarios.
