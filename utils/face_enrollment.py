@@ -99,6 +99,17 @@ class _DlibModels:
             return cls._detector, cls._shape_predictor, cls._face_recognizer
 
 
+def get_dlib_face_models():
+    """Return the shared (detector, shape_predictor, face_recognizer) singleton.
+
+    Exposed for reuse by other modules (e.g. utils/face_recognition.py's
+    live camera recognition service) that need the same expensive dlib
+    models already loaded here for enrollment, avoiding a duplicate
+    ~120MB model load.
+    """
+    return _DlibModels.get()
+
+
 def decode_image_bytes(raw_bytes: bytes) -> np.ndarray:
     """Decode raw image bytes (from an upload or webcam capture) into an OpenCV BGR array.
 
