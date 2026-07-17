@@ -23,6 +23,7 @@ import json
 import logging
 import signal
 import sys
+import threading
 import types
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -373,11 +374,27 @@ def get_running_application() -> Application:
 def main() -> int:
     """Application entry point.
 
-    Registers SIGINT/SIGTERM handlers, runs startup, and guarantees
-    shutdown runs even if an error occurs. Milestone 1 has no
-    long-running services yet, so the process returns immediately
-    after a successful startup/shutdown cycle; later milestones will
-    block here while camera/audio/conversation services run.
+    Registers SIGINT/SIGTERM handlers when safe to do so, runs
+    startup, and guarantees shutdown runs even if an error occurs.
+    Milestone 1 has no long-running services yet, so the process
+    returns immediately after a successful startup/shutdown cycle;
+    later milestones will block here while camera/audio/conversation
+    services run.
+
+    Signal registration only works on the main thread of the main
+    interpreter -- calling signal.signal() anywhere else raises
+    ValueError. Streamlit's ScriptRunner executes this module via
+    exec() on a worker thread while still setting __name__ to
+    "__main__" (to preserve normal script semantics for
+    `streamlit run app.py`), so this module's own
+    `if __name__ == "__main__":` guard below fires under Streamlit
+    too, reaching main() on a non-main thread. Rather than register
+    unconditionally and crash there, this checks first and skips
+    registration when unsafe; graceful shutdown is unaffected, since
+    it runs from the try/finally below regardless of whether OS
+    signal handlers were registered -- those handlers are an
+    enhancement (let Ctrl-C/SIGTERM trigger the same clean shutdown),
+    not what makes shutdown graceful.
 
     Returns:
         Process exit code: 0 on success, 1 on startup failure.
@@ -388,8 +405,15 @@ def main() -> int:
         app.logger.info("Received signal %s, initiating shutdown.", signum)
         raise KeyboardInterrupt
 
-    signal.signal(signal.SIGINT, _handle_signal)
-    signal.signal(signal.SIGTERM, _handle_signal)
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGINT, _handle_signal)
+        signal.signal(signal.SIGTERM, _handle_signal)
+    else:
+        get_logger(__name__).info(
+            "main() is not running on the main thread (e.g. under `streamlit run app.py`); "
+            "skipping SIGINT/SIGTERM handler registration. Graceful shutdown via "
+            "try/finally is unaffected."
+        )
 
     try:
         app.startup()
@@ -411,5 +435,21 @@ def main() -> int:
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == "__main__" and threading.current_thread() is threading.main_thread():
+    # The extra main-thread check (beyond the usual __name__ guard) is
+    # required because Streamlit's ScriptRunner executes this module via
+    # exec() on a worker thread while still setting __name__ to
+    # "__main__" (to preserve normal script semantics for
+    # `streamlit run app.py`), which would otherwise call main() there
+    # too. That matters beyond just the signal-handling issue this
+    # guards against: main()'s sys.exit() raises SystemExit, a
+    # BaseException that Streamlit's own script-execution wrapper
+    # (exec_func_with_error_handling) does not catch -- it only catches
+    # RerunException, StopException, FragmentHandledException, and
+    # Exception -- so an unhandled SystemExit would escape into
+    # Streamlit's internals on that worker thread instead of cleanly
+    # exiting the process, which is what sys.exit() is for. Streamlit
+    # pages always use get_running_application() (see above), never
+    # main(), so skipping main() entirely under Streamlit loses no
+    # functionality.
     sys.exit(main())
