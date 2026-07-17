@@ -1,23 +1,17 @@
 {
-  "whisper_model": "base",
-  "face_confidence": 0.6,
-  "vad_aggressiveness": 2,
-  "conversation_timeout": 30,
-  "wake_words": {
-    "english": [
-      "hello robot",
-      "hey robot",
-      "computer"
-    ],
-    "amharic": [
-      "ሰላም ሮቦት",
-      "ሄይ ሮቦት"
-    ],
-    "arabic": [
-      "مرحبا روبوت",
-      "أهلا روبوت"
-    ]
-  },
   "camera_index": 0,
-  "gpu_acceleration": false
+  "camera_width": 640,
+  "camera_height": 480,
+
+  "whisper_model": "base",
+
+  "recognition_interval": 10,
+
+  "face_confidence": 0.6,
+
+  "face_lost_timeout": 5,
+
+  "vad_aggressiveness": 2,
+
+  "conversation_timeout": 30
 }

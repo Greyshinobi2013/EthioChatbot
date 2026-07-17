@@ -1,16 +1,5 @@
 {
-  "english": [
-    {
-      "user_text": "what is your name",
-      "response_audio": "audio/english/name.wav"
-    },
-    {
-      "user_text": "hello",
-      "response_audio": "audio/english/greeting.wav"
-    }
-  ],
-
+  "english": [],
   "amharic": [],
-
   "arabic": []
 }
