@@ -1,1 +1,8 @@
 /Chatbot
+
+__pycache__/
+*.pyc
+.venv/
+venv/
+logs/*.log
+.streamlit/
