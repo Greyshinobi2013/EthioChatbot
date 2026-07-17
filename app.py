@@ -1,15 +1,15 @@
 """EthioChatbot V2 application entry point.
 
-Milestone 1 establishes the project foundation only: configuration
-loading, centralized logging, shared application state, and a service
-registration framework that later milestones populate with the
-camera, audio, Whisper, VAD, playback, and conversation services.
+Milestone 1 established configuration loading, centralized logging,
+shared application state, and a service registration framework.
+Milestone 2 adds the Event Bus and Finite State Machine backbone.
+Camera, audio, Whisper, VAD, and playback services are populated by
+later milestones via the ServiceRegistry.
 
 Per ARCHITECTURE.md's Startup Sequence, this module loads
-configuration first, then initializes logging, then shared state,
-then the service registry, then starts any registered services and
-enters IDLE. The Event Bus and Finite State Machine are introduced in
-Milestone 2 and are not wired in here.
+configuration, initializes logging, initializes the event bus,
+initializes shared state, initializes the FSM, initializes the
+service registry, starts any registered services, and enters IDLE.
 """
 from __future__ import annotations
 
@@ -22,6 +22,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Protocol, runtime_checkable
 
+from utils.event_bus import EventBus
+from utils.fsm import FiniteStateMachine
 from utils.logger import configure_logging, get_logger
 from utils.state_manager import StateManager
 
@@ -193,16 +195,20 @@ class Application:
         """
         self.config_path = config_path
         self.config: Optional[AppConfig] = None
+        self.event_bus: Optional[EventBus] = None
         self.state: Optional[StateManager] = None
+        self.fsm: Optional[FiniteStateMachine] = None
         self.registry: Optional[ServiceRegistry] = None
         self.logger: logging.Logger = get_logger(__name__)
 
     def startup(self) -> None:
         """Run the application startup lifecycle.
 
-        Sequence: load configuration -> initialize logging ->
-        initialize shared state -> initialize service registry ->
-        start any registered services -> enter IDLE.
+        Sequence (per ARCHITECTURE.md's Startup Sequence): load
+        configuration -> initialize logging -> initialize event bus ->
+        initialize shared state -> initialize the FSM -> initialize
+        service registry -> start any registered services -> enter
+        IDLE.
 
         Raises:
             ConfigurationError: if configuration cannot be loaded.
@@ -213,19 +219,28 @@ class Application:
         self.logger = get_logger(__name__)
         self.logger.info("SYSTEM_STARTUP: configuration loaded from %s", self.config_path)
 
+        self.event_bus = EventBus()
+        self.logger.info("Event bus initialized")
+
         self.state = StateManager(initial_state="IDLE")
         self.logger.info("Shared state initialized: state=%s", self.state.current_state)
 
+        self.fsm = FiniteStateMachine(self.event_bus, self.state)
+        self.logger.info("Finite State Machine initialized")
+
         self.registry = ServiceRegistry(self.logger)
-        self.logger.info("Service registry initialized (Milestone 1: no services registered yet)")
+        self.logger.info("Service registry initialized (Milestone 1/2: no services registered yet)")
 
         self.registry.start_all()
 
+        self.event_bus.publish("SYSTEM_STARTUP", {"config_path": str(self.config_path)})
         self.logger.info("SYSTEM_STARTUP complete. Application entered IDLE state.")
 
     def shutdown(self) -> None:
         """Run the application shutdown lifecycle: stop services, log completion."""
         self.logger.info("SYSTEM_SHUTDOWN: beginning graceful shutdown")
+        if self.event_bus is not None:
+            self.event_bus.publish("SYSTEM_SHUTDOWN")
         if self.registry is not None:
             self.registry.stop_all()
         self.logger.info("SYSTEM_SHUTDOWN complete.")
@@ -263,7 +278,7 @@ def main() -> int:
 
     try:
         app.logger.info(
-            "Application foundation ready (Milestone 1). "
+            "Application foundation ready (Milestone 1/2). "
             "No long-running services are registered yet."
         )
     finally:
