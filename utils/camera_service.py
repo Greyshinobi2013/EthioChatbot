@@ -6,6 +6,7 @@ once and remains open, per ARCHITECTURE.md's Camera Service requirements.
 """
 from __future__ import annotations
 
+import platform
 import threading
 import time
 
@@ -21,6 +22,42 @@ logger = get_logger("camera_service")
 DETECTION_INTERVAL_SECONDS = 0.3
 BOX_COLOR_KNOWN = (0, 200, 0)
 BOX_COLOR_UNKNOWN = (0, 0, 200)
+OPEN_RETRY_ATTEMPTS = 5
+OPEN_RETRY_DELAY_SECONDS = 0.3
+
+
+def _open_camera(camera_index: int) -> "cv2.VideoCapture | None":
+    """Open the camera with an explicit backend and a bounded retry.
+
+    Explicit CAP_V4L2 (Linux only -- this stack targets Linux throughout;
+    forcing it on another OS would break camera opening entirely, so it's
+    only applied there) makes backend selection deterministic instead of
+    relying on OpenCV's auto-detection, which can silently fall back to a
+    non-capturing backend (observed: a device node with no real capture
+    capability still reporting isOpened()=True via a fallback backend).
+
+    The retry absorbs a transient device-busy window (e.g. the OS hasn't
+    finished releasing the device from a just-exited process yet) instead
+    of failing permanently on the very first attempt -- a real device
+    conflict (something still actively holding the camera) will still
+    correctly exhaust all attempts and report ERROR.
+    """
+    use_v4l2 = platform.system() == "Linux"
+
+    for attempt in range(1, OPEN_RETRY_ATTEMPTS + 1):
+        capture = cv2.VideoCapture(camera_index, cv2.CAP_V4L2) if use_v4l2 else cv2.VideoCapture(camera_index)
+        if capture.isOpened():
+            if attempt > 1:
+                logger.info("Camera opened at index %s on attempt %d", camera_index, attempt)
+            return capture
+        capture.release()
+        if attempt < OPEN_RETRY_ATTEMPTS:
+            logger.warning(
+                "Camera open attempt %d/%d failed for index %s; retrying",
+                attempt, OPEN_RETRY_ATTEMPTS, camera_index,
+            )
+            time.sleep(OPEN_RETRY_DELAY_SECONDS)
+    return None
 
 
 def run_camera_service(state: AppState, stop_event: threading.Event) -> None:
@@ -39,9 +76,11 @@ def run_camera_service(state: AppState, stop_event: threading.Event) -> None:
         logger.exception("Failed to load face database; recognition disabled")
         known_faces = {}
 
-    capture = cv2.VideoCapture(camera_index)
-    if not capture.isOpened():
-        logger.error("Could not open camera at index %s", camera_index)
+    capture = _open_camera(camera_index)
+    if capture is None:
+        logger.error(
+            "Could not open camera at index %s after %d attempts", camera_index, OPEN_RETRY_ATTEMPTS
+        )
         state.set_status("camera_status", "ERROR")
         return
 

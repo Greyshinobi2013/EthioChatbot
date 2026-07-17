@@ -78,31 +78,58 @@ def start_registered_services(state: AppState) -> None:
         logger.info("No service threads to start")
 
 
+_bootstrapped_state: AppState | None = None
+_bootstrap_lock = threading.Lock()
+
+
 def bootstrap_app() -> AppState:
     """Run the application startup sequence and return shared state.
 
     Sequence (ARCHITECTURE.md): load configuration -> initialize shared
     state -> bootstrap service threads -> enter IDLE.
+
+    Guarded by a process-wide singleton, not just st.cache_resource:
+    that cache can be invalidated (Streamlit's own "Clear cache" action,
+    or a second `streamlit run` process started against the same working
+    directory) and nothing in this app ever stops a running service
+    thread once started. Without this guard, a second call here would
+    start a second camera/mic thread that loses a device-contention race
+    against the orphaned first one, while every caller from that point on
+    keeps talking to the new (broken) state -- this is the confirmed root
+    cause of "Could not open camera" alongside still-arriving FACE_* events
+    from the original, orphaned thread. This makes the bootstrap body
+    itself run at most once per process, however many times it's called.
     """
-    logger.info("SYSTEM_STARTUP begin")
+    global _bootstrapped_state
 
-    config = load_configuration()
-    logger.info(
-        "Configuration loaded: whisper_model=%s, camera_index=%s, vad_aggressiveness=%s",
-        config["whisper_model"], config["camera_index"], config["vad_aggressiveness"],
-    )
+    with _bootstrap_lock:
+        if _bootstrapped_state is not None:
+            logger.warning(
+                "bootstrap_app() called again in this process; reusing the "
+                "existing state instead of starting duplicate service threads"
+            )
+            return _bootstrapped_state
 
-    state = AppState(config=config)
-    logger.info("Shared application state initialized")
+        logger.info("SYSTEM_STARTUP begin")
 
-    bootstrap_services(state)
-    start_registered_services(state)
+        config = load_configuration()
+        logger.info(
+            "Configuration loaded: whisper_model=%s, camera_index=%s, vad_aggressiveness=%s",
+            config["whisper_model"], config["camera_index"], config["vad_aggressiveness"],
+        )
 
-    state.system_status = "RUNNING"
-    state.set_state("IDLE")
+        state = AppState(config=config)
+        logger.info("Shared application state initialized")
 
-    logger.info("SYSTEM_STARTUP complete")
-    return state
+        bootstrap_services(state)
+        start_registered_services(state)
+
+        state.system_status = "RUNNING"
+        state.set_state("IDLE")
+
+        _bootstrapped_state = state
+        logger.info("SYSTEM_STARTUP complete")
+        return state
 
 
 @st.cache_resource(show_spinner=False)

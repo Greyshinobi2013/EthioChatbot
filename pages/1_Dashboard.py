@@ -45,6 +45,10 @@ st.subheader("Live Webcam Feed")
 st.caption("Bounding boxes: green = recognized user, red = unrecognized face")
 if state.latest_frame is not None:
     st.image(cv2.cvtColor(state.latest_frame, cv2.COLOR_BGR2RGB), channels="RGB")
+elif snapshot["camera_status"] == "ERROR":
+    st.error("Camera failed to initialize -- see System Logs below for details.")
+elif snapshot["camera_status"] == "STOPPED":
+    st.warning("Camera service has stopped.")
 else:
     st.info("Waiting for camera frames...")
 
