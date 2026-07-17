@@ -42,6 +42,17 @@ SUPPORTED_LANGUAGES = ("english", "amharic", "arabic")
 
 _users_file_lock = threading.Lock()
 
+# dlib's detector/shape_predictor/face_recognition_model_v1 objects are
+# not safe for concurrent invocation from multiple threads: calling the
+# same shared instance from two threads at once (e.g. a live
+# CameraService recognition thread and a concurrent enrollment) has
+# been observed to segfault the process, not just raise a Python
+# exception. Every dlib inference call anywhere in the app (this
+# module and utils/face_recognition.py) must hold this lock; it is
+# NOT needed for _DlibModels.get() itself, which has its own lock
+# guarding only the one-time load.
+DLIB_INFERENCE_LOCK = threading.Lock()
+
 
 class FaceEnrollmentError(Exception):
     """Raised when an image or metadata cannot be enrolled."""
@@ -148,21 +159,23 @@ def compute_face_embedding(image_bgr: np.ndarray) -> np.ndarray:
     detector, shape_predictor, face_recognizer = _DlibModels.get()
 
     rgb_image = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
-    detections = detector(rgb_image, 1)
 
-    if len(detections) == 0:
-        raise FaceEnrollmentError("No face detected in the provided image. Please try again.")
+    with DLIB_INFERENCE_LOCK:
+        detections = detector(rgb_image, 1)
 
-    if len(detections) > 1:
-        logger.warning(
-            "Multiple faces (%d) detected during enrollment; using the largest one",
-            len(detections),
-        )
+        if len(detections) == 0:
+            raise FaceEnrollmentError("No face detected in the provided image. Please try again.")
 
-    face_rect = max(detections, key=lambda rect: rect.width() * rect.height())
-    shape = shape_predictor(rgb_image, face_rect)
-    descriptor = face_recognizer.compute_face_descriptor(rgb_image, shape)
-    return np.array(descriptor, dtype=np.float64)
+        if len(detections) > 1:
+            logger.warning(
+                "Multiple faces (%d) detected during enrollment; using the largest one",
+                len(detections),
+            )
+
+        face_rect = max(detections, key=lambda rect: rect.width() * rect.height())
+        shape = shape_predictor(rgb_image, face_rect)
+        descriptor = face_recognizer.compute_face_descriptor(rgb_image, shape)
+        return np.array(descriptor, dtype=np.float64)
 
 
 def load_users() -> List[EnrolledUser]:

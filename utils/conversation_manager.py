@@ -16,12 +16,18 @@ scope: language context, scenario matching coordination, playback
 coordination, timeout handling. Greeting logic stays owned by
 utils/greeting_service.py (Milestone 5).
 
-Continuous microphone capture and the "detect end of a spoken
-question, then transcribe it" loop that would publish TRANSCRIPTION_READY
-during a live conversation are not built by any scheduled milestone
-(README's utils/audio_service.py is never assigned its own milestone);
-this module reacts correctly to TRANSCRIPTION_READY whenever it is
-published, but does not itself produce it.
+Continuous microphone capture (utils/audio_service.py, Milestone 13)
+feeds this pipeline's TRANSCRIPTION_READY during a live conversation.
+
+Milestone 13's full-integration testing found that nothing in the
+system ever published IDLE_ENTERED, so RETURN_TO_IDLE could never
+actually complete its transition to IDLE (STATE_MACHINE.md's
+"(RETURN_TO_IDLE, IDLE_ENTERED) -> IDLE" was permanently unreachable).
+RETURN_TO_IDLE's documented behavior ("Clear active users, Reset
+session state, Reset language context, Reset playback state") spans
+multiple services' domains, so this module -- already the language-
+context/session owner -- performs that cleanup and publishes
+IDLE_ENTERED once the FSM reaches RETURN_TO_IDLE.
 """
 from __future__ import annotations
 
@@ -31,7 +37,7 @@ from pathlib import Path
 from typing import Optional
 
 from utils.event_bus import Event, EventBus
-from utils.fsm import CONVERSATION_ACTIVE
+from utils.fsm import CONVERSATION_ACTIVE, RETURN_TO_IDLE
 from utils.logger import get_logger
 from utils.playback import PlaybackService
 from utils.state_manager import StateManager
@@ -88,6 +94,7 @@ class ConversationManager:
         self._bus.subscribe("WAKE_WORD_DETECTED", self._on_wake_word_detected)
         self._bus.subscribe("SCENARIO_MATCHED", self._on_scenario_matched)
         self._bus.subscribe("FALLBACK_SCENARIO_SELECTED", self._on_fallback_selected)
+        self._bus.subscribe("STATE_CHANGED", self._on_state_changed)
         # PLAYBACK_FINISHED marks the end of one conversational turn,
         # giving a fresh timeout window for the user's next question
         # rather than letting the clock drain during response playback.
@@ -212,3 +219,31 @@ class ConversationManager:
         self._bus.publish("LANGUAGE_CONTEXT_CLEARED", {})
 
         self._bus.publish("CONVERSATION_ENDED", {})
+
+    def _on_state_changed(self, event: Event) -> None:
+        """Complete RETURN_TO_IDLE's cleanup and finish its transition to IDLE.
+
+        Per STATE_MACHINE.md, RETURN_TO_IDLE's job is to "Clear active
+        users, Reset session state, Reset language context, Reset
+        playback state" before exiting to IDLE. camera_service.py
+        already clears active_users before publishing ALL_USERS_LOST
+        (which is what gets the FSM into RETURN_TO_IDLE in the first
+        place); this handles the remaining session/language/playback
+        reset and publishes IDLE_ENTERED, which utils/fsm.py's
+        transition table requires to actually reach IDLE.
+        """
+        if event.payload.get("to") != RETURN_TO_IDLE:
+            return
+
+        with self._lock:
+            self._active = False
+            self._last_activity_at = None
+
+        if self._state.current_language is not None:
+            self._state.set_current_language(None)
+            self._bus.publish("LANGUAGE_CONTEXT_CLEARED", {})
+
+        self._playback.stop_audio()
+
+        logger.info("RETURN_TO_IDLE cleanup complete")
+        self._bus.publish("IDLE_ENTERED", {})

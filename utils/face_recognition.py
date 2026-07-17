@@ -9,6 +9,14 @@ This module is a pure, event-bus-agnostic recognition engine. It owns
 no thread and publishes no events; utils/camera_service.py owns the
 camera loop, threading, and all event publishing, and calls into this
 module for the actual recognition work.
+
+Milestone 13's full-integration testing found that dlib's detector/
+shape_predictor/encoder objects are not safe for concurrent
+invocation from multiple threads -- calling the same shared instance
+from two threads at once (e.g. this recognizer's camera thread and a
+concurrent face enrollment) segfaulted the process. Every dlib call
+here holds utils.face_enrollment.DLIB_INFERENCE_LOCK, the same lock
+enrollment uses, so the two can never overlap.
 """
 from __future__ import annotations
 
@@ -18,7 +26,7 @@ from typing import Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
-from utils.face_enrollment import EnrolledUser, get_dlib_face_models, load_users
+from utils.face_enrollment import DLIB_INFERENCE_LOCK, EnrolledUser, get_dlib_face_models, load_users
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -126,7 +134,8 @@ class FaceRecognizer:
             and the list of dlib face rectangles found in it.
         """
         rgb_image = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        detections = self._detector(rgb_image, 0)
+        with DLIB_INFERENCE_LOCK:
+            detections = self._detector(rgb_image, 0)
         return rgb_image, detections
 
     def detect_face_count(self, frame_bgr: np.ndarray) -> int:
@@ -182,10 +191,11 @@ class FaceRecognizer:
         unknown_confidences: List[float] = []
 
         for face_rect in detections:
-            shape = self._shape_predictor(rgb_image, face_rect)
-            descriptor = np.array(
-                self._face_encoder.compute_face_descriptor(rgb_image, shape), dtype=np.float64
-            )
+            with DLIB_INFERENCE_LOCK:
+                shape = self._shape_predictor(rgb_image, face_rect)
+                descriptor = np.array(
+                    self._face_encoder.compute_face_descriptor(rgb_image, shape), dtype=np.float64
+                )
 
             user_id, confidence = self._best_match(descriptor)
             if user_id is None:

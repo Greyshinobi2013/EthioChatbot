@@ -13,6 +13,15 @@ that this service calls into.
 Implements app.py's Service protocol (name, start, stop) so it can be
 registered with the ServiceRegistry once wired into the application
 lifecycle.
+
+Milestone 13's full-integration testing found that nothing ever
+published FACE_LOST_CHECK_PASSED, the event Milestone 2's FSM design
+documented as needed to resolve FACE_LOST_CHECK back to
+WAITING_FOR_WAKE_WORD when users remain visible (e.g. after a
+conversation timeout, not just after camera_service's own
+check_face_lost() detects a lost face) -- so that path was
+permanently stuck. This service owns the active_users check, so it
+resolves FACE_LOST_CHECK for every entry path, not just its own.
 """
 from __future__ import annotations
 
@@ -23,8 +32,9 @@ from typing import Optional
 import cv2
 import numpy as np
 
-from utils.event_bus import EventBus
+from utils.event_bus import Event, EventBus
 from utils.face_recognition import FaceRecognizer, RecognitionOutcome
+from utils.fsm import FACE_LOST_CHECK
 from utils.logger import get_logger
 from utils.state_manager import StateManager
 
@@ -89,6 +99,25 @@ class CameraService:
 
         self._frame_lock = threading.Lock()
         self._latest_frame: Optional[np.ndarray] = None
+
+        self._bus.subscribe("STATE_CHANGED", self._on_state_changed)
+
+    def _on_state_changed(self, event: Event) -> None:
+        """Resolve FACE_LOST_CHECK for every entry path, not just this service's own.
+
+        FACE_LOST_CHECK can be entered either via this service's own
+        FACE_LOST/ALL_USERS_LOST (already resolved within the same
+        check_face_lost() call when it's a total loss) or via
+        conversation_manager.py's TIMEOUT -> LANGUAGE_CONTEXT_CLEARED
+        path, which has no other way to know whether users are still
+        visible. Either way, this is the single place that decides.
+        """
+        if event.payload.get("to") != FACE_LOST_CHECK:
+            return
+        if self._state.get_active_users():
+            self._bus.publish("FACE_LOST_CHECK_PASSED", {})
+        else:
+            self._bus.publish("ALL_USERS_LOST", {})
 
     def start(self) -> None:
         """Open the camera and start the capture loop on a background thread.

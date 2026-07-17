@@ -30,6 +30,7 @@ from typing import List, Optional, Protocol, runtime_checkable
 
 import streamlit as st
 
+from utils.audio_service import AudioService
 from utils.camera_service import CameraService
 from utils.conversation_manager import ConversationManager
 from utils.event_bus import EventBus
@@ -247,6 +248,7 @@ class Application:
         self.scenario_engine: Optional[ScenarioEngine] = None
         self.playback: Optional[PlaybackService] = None
         self.vad: Optional[VADHandler] = None
+        self.audio: Optional[AudioService] = None
         self.conversation: Optional[ConversationManager] = None
 
     def startup(self) -> None:
@@ -298,13 +300,14 @@ class Application:
 
         Extends startup() (foundation only: config/logging/event
         bus/state/FSM/empty registry) with the full pipeline built
-        across Milestones 3-10: face recognition, camera, greeting,
-        Whisper, scenario matching, playback, VAD/interruption, and
-        conversation orchestration. Used by the Streamlit dashboard's
-        cached singleton (see get_running_application() below); the
-        plain `python app.py` CLI entry point (main()) intentionally
-        stays foundation-only, so it keeps working without camera or
-        microphone hardware and without paying Whisper's load cost.
+        across Milestones 3-13: face recognition, camera, greeting,
+        Whisper, scenario matching, playback, VAD/interruption,
+        continuous microphone capture, and conversation orchestration.
+        Used by the Streamlit dashboard's cached singleton (see
+        get_running_application() below); the plain `python app.py`
+        CLI entry point (main()) intentionally stays foundation-only,
+        so it keeps working without camera or microphone hardware and
+        without paying Whisper's load cost.
         """
         self.startup()
         assert self.event_bus is not None and self.state is not None and self.registry is not None
@@ -328,6 +331,7 @@ class Application:
         self.vad = VADHandler(
             self.event_bus, self.state, self.playback, aggressiveness=self.config.vad_aggressiveness
         )
+        self.audio = AudioService(self.event_bus, self.state, self.whisper, self.vad)
         self.conversation = ConversationManager(
             self.event_bus, self.state, self.playback, timeout_seconds=self.config.conversation_timeout
         )
@@ -339,6 +343,7 @@ class Application:
             self.scenario_engine,
             self.playback,
             self.vad,
+            self.audio,
             self.conversation,
         ):
             self.registry.register(service)

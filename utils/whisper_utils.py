@@ -35,12 +35,13 @@ DEFAULT_MODEL_SIZE = "base"
 # must be mono float32 PCM in [-1, 1] at this rate.
 WHISPER_SAMPLE_RATE = 16000
 
-# Whisper language codes -> EthioChatbot's internal language names.
+# Whisper language codes -> EthioChatbot's internal language names, and the reverse.
 _WHISPER_LANGUAGE_TO_NAME: Dict[str, str] = {
     "en": "english",
     "am": "amharic",
     "ar": "arabic",
 }
+_NAME_TO_WHISPER_LANGUAGE: Dict[str, str] = {name: code for code, name in _WHISPER_LANGUAGE_TO_NAME.items()}
 
 WAKE_WORDS: Dict[str, Tuple[str, ...]] = {
     "english": ("hello robot", "hey robot", "computer"),
@@ -249,3 +250,46 @@ class WhisperService:
         else:
             self._bus.publish("WAKE_WORD_REJECTED", {})
         return match
+
+    def transcribe_and_publish(self, audio: np.ndarray) -> str:
+        """Transcribe a captured utterance and publish the result.
+
+        Used during CONVERSATION_ACTIVE (Milestone 13's audio service
+        hands it a captured question) to transcribe using the
+        established current_language -- forcing the language rather
+        than auto-detecting improves accuracy and matches
+        ARCHITECTURE.md's Language Context Architecture ("After
+        activation: All STT... use current_language"), unlike
+        detect_wake_word()'s auto-detection, which runs before any
+        language is known.
+
+        Publishes TRANSCRIPTION_STARTED before transcribing and
+        TRANSCRIPTION_READY (with the transcribed text) after, per
+        EVENTS.md's attribution of both to the Whisper Service.
+        TRANSCRIPTION_READY triggers utils/scenario_engine.py's
+        existing subscription (Milestone 7) automatically.
+
+        Requires this WhisperService to have been constructed with an
+        event_bus.
+
+        Args:
+            audio: Mono float32 PCM samples at 16kHz.
+
+        Returns:
+            The raw transcribed text.
+
+        Raises:
+            RuntimeError: if this instance was constructed without an event_bus.
+        """
+        if self._bus is None:
+            raise RuntimeError("transcribe_and_publish() requires WhisperService to be constructed with an event_bus")
+
+        self._bus.publish("TRANSCRIPTION_STARTED", {})
+
+        language_name = self._state.current_language if self._state is not None else None
+        whisper_language_code = _NAME_TO_WHISPER_LANGUAGE.get(language_name) if language_name else None
+        _, text = self.transcribe(audio, language=whisper_language_code)
+
+        logger.info("Transcribed (language=%s): '%s'", language_name, text)
+        self._bus.publish("TRANSCRIPTION_READY", {"text": text})
+        return text
