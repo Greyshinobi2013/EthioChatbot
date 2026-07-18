@@ -39,6 +39,7 @@ from utils.face_recognition import FaceRecognizer
 from utils.fsm import FiniteStateMachine
 from utils.greeting_service import GreetingService
 from utils.logger import configure_logging, get_logger
+from utils.noise_suppression import NoiseSuppressor
 from utils.playback import PlaybackService
 from utils.scenario_engine import ScenarioEngine
 from utils.state_manager import StateManager
@@ -88,6 +89,14 @@ class AppConfig:
             not relied on regardless, since it was found to raise
             PortAudioError [PaErrorCode -9999] on this project's own
             ALSA/PipeWire setup.
+        noise_suppression_enabled: Whether utils/noise_suppression.py's
+            RNNoise stage runs between microphone capture and VAD/
+            Whisper. Optional (defaults to True); False makes
+            AudioService behave exactly as it did before noise
+            suppression existed.
+        noise_suppression_engine: Which engine to use. Only "rnnoise"
+            is implemented; any other value disables suppression
+            (logged, not an error) rather than failing startup.
     """
 
     camera_index: int
@@ -100,6 +109,8 @@ class AppConfig:
     vad_aggressiveness: int
     conversation_timeout: int
     audio_input_device: Optional[int] = None
+    noise_suppression_enabled: bool = True
+    noise_suppression_engine: str = "rnnoise"
 
     @classmethod
     def from_dict(cls, data: dict) -> "AppConfig":
@@ -107,6 +118,8 @@ class AppConfig:
         return cls(
             **{key: data[key] for key in REQUIRED_CONFIG_KEYS},
             audio_input_device=data.get("audio_input_device"),
+            noise_suppression_enabled=data.get("noise_suppression_enabled", True),
+            noise_suppression_engine=data.get("noise_suppression_engine", "rnnoise"),
         )
 
 
@@ -262,6 +275,7 @@ class Application:
         self.scenario_engine: Optional[ScenarioEngine] = None
         self.playback: Optional[PlaybackService] = None
         self.vad: Optional[VADHandler] = None
+        self.noise_suppressor: Optional[NoiseSuppressor] = None
         self.audio: Optional[AudioService] = None
         self.conversation: Optional[ConversationManager] = None
 
@@ -345,8 +359,16 @@ class Application:
         self.vad = VADHandler(
             self.event_bus, self.state, self.playback, aggressiveness=self.config.vad_aggressiveness
         )
+        self.noise_suppressor = NoiseSuppressor(
+            enabled=self.config.noise_suppression_enabled, engine=self.config.noise_suppression_engine
+        )
         self.audio = AudioService(
-            self.event_bus, self.state, self.whisper, self.vad, device=self.config.audio_input_device
+            self.event_bus,
+            self.state,
+            self.whisper,
+            self.vad,
+            noise_suppressor=self.noise_suppressor,
+            device=self.config.audio_input_device,
         )
         self.conversation = ConversationManager(
             self.event_bus, self.state, self.playback, timeout_seconds=self.config.conversation_timeout
@@ -359,6 +381,10 @@ class Application:
             self.scenario_engine,
             self.playback,
             self.vad,
+            # Must start before self.audio: AudioService's capture thread
+            # calls noise_suppressor.process() on its very first frame,
+            # so the RNNoise engine needs to already be initialized.
+            self.noise_suppressor,
             self.audio,
             self.conversation,
         ):

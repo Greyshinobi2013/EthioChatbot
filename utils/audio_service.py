@@ -41,6 +41,7 @@ import sounddevice as sd
 from utils.event_bus import EventBus
 from utils.fsm import CONVERSATION_ACTIVE, WAITING_FOR_WAKE_WORD
 from utils.logger import get_logger
+from utils.noise_suppression import NoiseSuppressor
 from utils.state_manager import StateManager
 from utils.vad_handler import VAD_FRAME_DURATION_MS, VAD_SAMPLE_RATE, VADHandler
 from utils.whisper_utils import WhisperService
@@ -147,6 +148,7 @@ class AudioService:
         state_manager: StateManager,
         whisper_service: WhisperService,
         vad_handler: VADHandler,
+        noise_suppressor: Optional[NoiseSuppressor] = None,
         device: Optional[int] = None,
         capture_sample_rate: Optional[int] = None,
         utterance_silence_ms: int = DEFAULT_UTTERANCE_SILENCE_MS,
@@ -163,6 +165,16 @@ class AudioService:
             vad_handler: Every captured frame is forwarded to its
                 process_frame(); it self-gates on current_state, so
                 this is safe regardless of what state the robot is in.
+            noise_suppressor: Applied to each raw captured chunk before
+                resampling/VAD/accumulation (Microphone -> AudioService
+                -> RNNoise -> VADHandler). Optional and defaults to
+                None, in which case AudioService behaves exactly as it
+                did before noise suppression existed -- when provided
+                but disabled (config/settings.json's
+                noise_suppression_enabled=false), its own process()
+                is still called but always returns its input unchanged,
+                which is equivalent but keeps the diagnostic logging
+                (NOISE_SUPPRESSION_ENABLED/AUDIO_PATH) consistent.
             device: sounddevice input device index to prefer (e.g.
                 config/settings.json's audio_input_device). Always
                 validated with sd.check_input_settings() before use;
@@ -185,6 +197,7 @@ class AudioService:
         self._state = state_manager
         self._whisper = whisper_service
         self._vad = vad_handler
+        self._noise_suppressor = noise_suppressor
         self._device = device
         self._requested_sample_rate = capture_sample_rate
 
@@ -490,7 +503,23 @@ class AudioService:
             )
             return
 
-        frame_16k = resample_int16(raw_native_rate_int16, native_rate, VAD_SAMPLE_RATE)
+        # Microphone -> AudioService -> RNNoise -> VADHandler: noise
+        # suppression runs on the raw, full-native-rate chunk (before
+        # resampling to 16kHz), since RNNoise's model is specifically
+        # trained at 48kHz and denoising after downsampling would both
+        # violate that and throw away exactly the high-frequency
+        # information the model uses. process() is a no-op passthrough
+        # (returns raw_native_rate_int16 unchanged) when noise
+        # suppression is disabled/unavailable/failing, so everything
+        # below is completely unaffected either way -- this is the
+        # *only* call site for noise suppression in the entire pipeline.
+        denoised_native_rate_int16 = (
+            self._noise_suppressor.process(raw_native_rate_int16, native_rate)
+            if self._noise_suppressor is not None
+            else raw_native_rate_int16
+        )
+
+        frame_16k = resample_int16(denoised_native_rate_int16, native_rate, VAD_SAMPLE_RATE)
 
         if frame_16k.size == 0:
             # Should be unreachable given the length guard above (see its

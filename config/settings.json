@@ -15,5 +15,8 @@
 
   "conversation_timeout": 30,
 
-  "audio_input_device": 3
+  "audio_input_device": 3,
+
+  "noise_suppression_enabled": true,
+  "noise_suppression_engine": "rnnoise"
 }
