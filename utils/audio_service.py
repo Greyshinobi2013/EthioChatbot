@@ -98,6 +98,19 @@ def _resample_time_axes(num_samples: int, from_rate: int, to_rate: int) -> Tuple
     return original_times, target_times
 
 
+def _int16_rms(samples: np.ndarray) -> float:
+    """RMS amplitude of int16 PCM samples, in raw int16 units (0-32768 scale).
+
+    Shared by the temporary gain-diagnostic logging in process_chunk()
+    and _accumulate_utterance() so "RMS before/after resampling" and
+    "RMS before/after normalization" are computed identically and are
+    directly comparable.
+    """
+    if samples.size == 0:
+        return 0.0
+    return float(np.sqrt(np.mean(np.square(samples, dtype=np.float64))))
+
+
 def resample_int16(samples: np.ndarray, from_rate: int, to_rate: int) -> np.ndarray:
     """Resample mono int16 PCM from from_rate to to_rate via linear interpolation.
 
@@ -459,13 +472,36 @@ class AudioService:
         # it is safe and correct to always forward every frame to it.
         self._vad.process_frame(frame_bytes)
 
+        # Computed once here (rather than separately inside
+        # _accumulate_utterance()) so it can also gate the temporary
+        # gain-diagnostic log below without a second VAD call.
+        is_speech = self._vad.is_speech(frame_bytes)
+
+        if is_speech:
+            # TEMPORARY DIAGNOSTIC (investigating low captured amplitude /
+            # garbage transcriptions): confirms whether attenuation, if
+            # any, happens during capture (mic/device gain) or during our
+            # own resampling -- logged only on speech frames to avoid
+            # spamming every idle 30ms frame.
+            raw_rms = _int16_rms(raw_native_rate_int16)
+            resampled_rms = _int16_rms(frame_16k)
+            logger.info(
+                "AUDIO_GAIN_DIAGNOSTIC: raw_rms=%.4f (native %dHz, %d samples, int16 scale) -> "
+                "resampled_rms=%.4f (16kHz, %d samples, int16 scale) [full scale=32768]",
+                raw_rms,
+                native_rate,
+                len(raw_native_rate_int16),
+                resampled_rms,
+                len(frame_16k),
+            )
+
         current_state = self._state.current_state
         if current_state == WAITING_FOR_WAKE_WORD:
             self._state.set_wake_word_status("listening")
-            self._accumulate_utterance(frame_bytes, frame_16k, self._finish_wake_word_utterance)
+            self._accumulate_utterance(frame_bytes, frame_16k, is_speech, self._finish_wake_word_utterance)
         elif current_state == CONVERSATION_ACTIVE:
             self._state.set_wake_word_status("inactive")
-            self._accumulate_utterance(frame_bytes, frame_16k, self._finish_conversation_utterance)
+            self._accumulate_utterance(frame_bytes, frame_16k, is_speech, self._finish_conversation_utterance)
         else:
             self._state.set_wake_word_status("inactive")
             if self._utterance_active:
@@ -475,7 +511,7 @@ class AudioService:
                 self._reset_utterance()
 
     def _accumulate_utterance(
-        self, frame_bytes: bytes, frame_16k: np.ndarray, on_complete: Callable[[np.ndarray], None]
+        self, frame_bytes: bytes, frame_16k: np.ndarray, is_speech: bool, on_complete: Callable[[np.ndarray], None]
     ) -> None:
         """Accumulate frames from speech onset to trailing silence (or a hard cap), then hand off.
 
@@ -483,9 +519,12 @@ class AudioService:
         max_utterance_seconds (self._max_utterance_frames) and is
         cleared the instant an utterance completes, regardless of
         outcome -- it never accumulates across utterances.
-        """
-        is_speech = self._vad.is_speech(frame_bytes)
 
+        Args:
+            is_speech: Whether frame_bytes was VAD-flagged as speech,
+                computed once by the caller (process_chunk()) rather
+                than recomputed here.
+        """
         if not self._utterance_active:
             if not is_speech:
                 return
@@ -505,7 +544,28 @@ class AudioService:
             self._reset_utterance()
 
             audio_int16 = np.concatenate(chunks)
+            rms_before_normalization = _int16_rms(audio_int16)
             audio_float32 = (audio_int16.astype(np.float32) / 32768.0).clip(-1.0, 1.0)
+            rms_after_normalization = float(np.sqrt(np.mean(np.square(audio_float32, dtype=np.float64))))
+
+            # TEMPORARY DIAGNOSTIC: rms_after_normalization should equal
+            # rms_before_normalization / 32768 almost exactly (int16 ->
+            # [-1, 1] float32 is a pure linear scale, per resample_int16()
+            # / the /32768.0 division just above -- neither step can
+            # attenuate beyond that fixed ratio). If the captured
+            # amplitude is already this low before normalization, the
+            # cause is upstream (microphone gain / capture device), not
+            # this conversion.
+            logger.info(
+                "AUDIO_NORMALIZATION_DIAGNOSTIC: utterance_samples=%d rms_before_normalization=%.4f "
+                "(int16 scale) rms_after_normalization=%.6f (float32 [-1,1] scale) "
+                "actual_ratio=%.8f expected_ratio=%.8f (1/32768)",
+                len(audio_int16),
+                rms_before_normalization,
+                rms_after_normalization,
+                (rms_after_normalization / rms_before_normalization) if rms_before_normalization else float("nan"),
+                1.0 / 32768.0,
+            )
 
             # Run the (comparatively slow) Whisper call on its own
             # thread so the capture loop never stalls reading the
