@@ -22,6 +22,7 @@ import time
 from pathlib import Path
 from typing import Dict, Optional
 
+import numpy as np
 import pygame
 import webrtcvad
 
@@ -120,6 +121,11 @@ class VADHandler:
         self._interrupted = False
         self._please_wait_finished = False
 
+        # Tracks silence->speech edges for SPEECH_DETECTED (EVENTS.md),
+        # independent of self._interrupted -- speech activity is reported
+        # regardless of whether a response happens to be playing.
+        self._speech_active = False
+
         self._lock = threading.RLock()
         self._please_wait_thread: Optional[threading.Thread] = None
 
@@ -149,12 +155,22 @@ class VADHandler:
     def process_frame(self, frame: bytes) -> None:
         """Feed one audio frame through VAD and drive the interruption workflow.
 
+        Also publishes SPEECH_DETECTED (EVENTS.md) on every silence->speech
+        edge, independent of and prior to the interruption-workflow logic
+        below -- this is a pure, side-effect-only addition that does not
+        alter that logic's control flow or the FSM in any way.
+
         Args:
             frame: 16-bit mono PCM bytes, exactly VAD_FRAME_BYTES long.
         """
         speech = self.is_speech(frame)
 
         with self._lock:
+            speech_started = speech and not self._speech_active
+            self._speech_active = speech
+            if speech_started:
+                self._publish_speech_detected(frame)
+
             if not self._interrupted:
                 if speech and self._should_interrupt_now():
                     self._begin_interruption()
@@ -171,6 +187,45 @@ class VADHandler:
                 self._consecutive_silent_frames += 1
                 if self._consecutive_silent_frames >= self._silent_frames_required:
                     self._clear_interruption()
+
+    def _publish_speech_detected(self, frame: bytes) -> None:
+        """Publish SPEECH_DETECTED for one silence->speech edge, per EVENTS.md.
+
+        Payload carries timestamp, audio_level (RMS of the raw PCM
+        frame, normalized to [0, 1]; None if it cannot be computed),
+        and current_state -- purely observational (Dashboard/log
+        visibility per EVENTS.md Principle 4), consumed by no service
+        today, so this cannot affect FSM transitions or behavior.
+        """
+        timestamp = time.time()
+        audio_level = self._compute_audio_level(frame)
+        current_state = self._state.current_state if self._state is not None else None
+
+        logger.info(
+            "SPEECH_DETECTED: timestamp=%.3f audio_level=%s current_state=%s",
+            timestamp,
+            audio_level,
+            current_state,
+        )
+        self._publish(
+            "SPEECH_DETECTED",
+            {"timestamp": timestamp, "audio_level": audio_level, "current_state": current_state},
+        )
+
+    @staticmethod
+    def _compute_audio_level(frame: bytes) -> Optional[float]:
+        """RMS amplitude of one 16-bit PCM frame, normalized to [0, 1].
+
+        Returns None if the frame is empty rather than raising, since
+        EVENTS.md only requires audio_level "if available".
+        """
+        if not frame:
+            return None
+        samples = np.frombuffer(frame, dtype=np.int16).astype(np.float64)
+        if samples.size == 0:
+            return None
+        rms = float(np.sqrt(np.mean(np.square(samples))))
+        return round(rms / 32768.0, 4)
 
     def _should_interrupt_now(self) -> bool:
         """Only interrupt while a response is actually playing."""

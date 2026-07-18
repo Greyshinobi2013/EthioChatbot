@@ -115,6 +115,22 @@ if st.button("Enroll User", type="primary", disabled=image_bgr is None):
                 image_bgr=image_bgr,
             )
             st.session_state.pop("enroll_captured_frame", None)
+
+            # enroll_user() only writes to disk (faces/users.json,
+            # faces/images/, faces/embeddings/); it has no reference to
+            # the live FaceRecognizer CameraService is using, which
+            # loaded its in-memory embedding cache once at application
+            # startup and is never told to refresh. Without this call,
+            # the newly enrolled user is fully persisted but invisible
+            # to recognition until the process restarts. CameraService
+            # holds the exact same FaceRecognizer instance (not a
+            # copy), so refreshing it here immediately updates what the
+            # live camera pipeline recognizes -- no other plumbing
+            # needed, and no restart required.
+            application = get_running_application()
+            if application.recognizer is not None:
+                application.recognizer.reload_embeddings()
+
             st.success(
                 f"Enrolled '{record.user_id}' successfully "
                 f"(priority={record.priority}, language={record.preferred_language})."

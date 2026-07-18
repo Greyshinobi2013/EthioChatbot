@@ -180,6 +180,15 @@ class WhisperService:
         string comparisons), so an occasional language
         auto-misdetection by Whisper does not prevent a match.
 
+        Every call logs a full WAKE_WORD_EVALUATION record at INFO
+        level (raw transcription, normalized transcription, Whisper's
+        detected language, the complete wake-word catalog checked,
+        the per-phrase match/no-match result, and the final outcome)
+        so that live regressions -- e.g. Whisper mis-transcribing a
+        spoken wake word close enough to be human-recognizable but not
+        an exact/substring match against WAKE_WORDS -- are diagnosable
+        from logs alone, without reproducing the failure interactively.
+
         Args:
             audio: Mono float32 PCM samples at 16kHz.
 
@@ -188,34 +197,61 @@ class WhisperService:
         """
         whisper_language_code, raw_text = self.transcribe(audio, language=None)
         normalized = normalize_text(raw_text)
+        detected_language = _WHISPER_LANGUAGE_TO_NAME.get(whisper_language_code, whisper_language_code or "unknown")
+
+        match: Optional[WakeWordMatch] = None
+        per_phrase_results: list[Tuple[str, str, bool]] = []
+
+        if normalized:
+            for candidate_language, phrases in WAKE_WORDS.items():
+                for phrase in phrases:
+                    normalized_phrase = normalize_text(phrase)
+                    is_match = normalized_phrase == normalized or normalized_phrase in normalized
+                    per_phrase_results.append((candidate_language, phrase, is_match))
+                    if is_match and match is None:
+                        match = WakeWordMatch(
+                            language=candidate_language,
+                            matched_phrase=phrase,
+                            transcribed_text=normalized,
+                        )
 
         if not normalized:
-            logger.debug("Empty transcription; no wake word possible")
-            return None
+            reason = "transcription is empty after normalization"
+        elif match is not None:
+            reason = f"matched '{match.matched_phrase}' (language={match.language})"
+        else:
+            reason = "no configured wake word matched the normalized transcription"
 
-        for candidate_language, phrases in WAKE_WORDS.items():
-            for phrase in phrases:
-                normalized_phrase = normalize_text(phrase)
-                if normalized_phrase == normalized or normalized_phrase in normalized:
-                    logger.info(
-                        "Wake word matched: language=%s phrase='%s' whisper_detected='%s' transcription='%s'",
-                        candidate_language,
-                        phrase,
-                        whisper_language_code,
-                        normalized,
-                    )
-                    return WakeWordMatch(
-                        language=candidate_language,
-                        matched_phrase=phrase,
-                        transcribed_text=normalized,
-                    )
-
-        logger.debug(
-            "No wake word matched (whisper_detected_language=%s transcription='%s')",
-            whisper_language_code,
-            normalized,
+        expected_wake_words_block = "\n".join(
+            f"    {language}: {list(phrases)}" for language, phrases in WAKE_WORDS.items()
         )
-        return None
+        per_phrase_block = (
+            "\n".join(
+                f"    {language}: '{phrase}' -> {'MATCH' if is_match else 'no match'}"
+                for language, phrase, is_match in per_phrase_results
+            )
+            or "    (skipped: empty transcription)"
+        )
+
+        logger.info(
+            "WAKE_WORD_EVALUATION\n"
+            "  RAW_TRANSCRIPTION: %r\n"
+            "  NORMALIZED_TEXT: %r\n"
+            "  DETECTED_LANGUAGE: %s\n"
+            "  EXPECTED_WAKE_WORDS:\n%s\n"
+            "  PER_PHRASE_RESULTS:\n%s\n"
+            "  MATCH_RESULT: %s\n"
+            "  REASON: %s",
+            raw_text,
+            normalized,
+            detected_language,
+            expected_wake_words_block,
+            per_phrase_block,
+            "true" if match is not None else "false",
+            reason,
+        )
+
+        return match
 
     def process_audio(self, audio: np.ndarray) -> Optional[WakeWordMatch]:
         """Run wake-word detection on an audio buffer and drive the FSM.

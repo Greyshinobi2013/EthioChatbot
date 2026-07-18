@@ -79,6 +79,15 @@ class AppConfig:
         face_lost_timeout: Seconds of absence before FACE_LOST fires.
         vad_aggressiveness: WebRTC VAD aggressiveness level (0-3).
         conversation_timeout: Seconds of inactivity before TIMEOUT fires.
+        audio_input_device: Preferred sounddevice input device index
+            for the microphone (e.g. 3), or None to skip straight to
+            utils/audio_service.py's fallback device probing. Optional
+            (defaults to None) so existing configuration files without
+            this key still load; PortAudio's own "system default"
+            device (device=None passed straight to sd.InputStream) is
+            not relied on regardless, since it was found to raise
+            PortAudioError [PaErrorCode -9999] on this project's own
+            ALSA/PipeWire setup.
     """
 
     camera_index: int
@@ -90,11 +99,15 @@ class AppConfig:
     face_lost_timeout: int
     vad_aggressiveness: int
     conversation_timeout: int
+    audio_input_device: Optional[int] = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "AppConfig":
         """Build an AppConfig from a validated settings dictionary."""
-        return cls(**{key: data[key] for key in REQUIRED_CONFIG_KEYS})
+        return cls(
+            **{key: data[key] for key in REQUIRED_CONFIG_KEYS},
+            audio_input_device=data.get("audio_input_device"),
+        )
 
 
 def load_configuration(config_path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
@@ -332,7 +345,9 @@ class Application:
         self.vad = VADHandler(
             self.event_bus, self.state, self.playback, aggressiveness=self.config.vad_aggressiveness
         )
-        self.audio = AudioService(self.event_bus, self.state, self.whisper, self.vad)
+        self.audio = AudioService(
+            self.event_bus, self.state, self.whisper, self.vad, device=self.config.audio_input_device
+        )
         self.conversation = ConversationManager(
             self.event_bus, self.state, self.playback, timeout_seconds=self.config.conversation_timeout
         )

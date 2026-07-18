@@ -13,5 +13,7 @@
 
   "vad_aggressiveness": 2,
 
-  "conversation_timeout": 30
+  "conversation_timeout": 30,
+
+  "audio_input_device": 3
 }

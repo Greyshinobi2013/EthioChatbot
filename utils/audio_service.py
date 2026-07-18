@@ -31,6 +31,7 @@ separate:
 from __future__ import annotations
 
 import threading
+import time
 from functools import lru_cache
 from typing import Callable, List, Optional, Tuple
 
@@ -49,6 +50,27 @@ logger = get_logger(__name__)
 DEFAULT_UTTERANCE_SILENCE_MS = 800
 DEFAULT_MAX_UTTERANCE_SECONDS = 8.0
 _FALLBACK_CAPTURE_SAMPLE_RATES = (48000, 44100, 32000, 16000)
+
+# Known-working input device indices on this project's own hardware
+# (confirmed via direct sd.check_input_settings() investigation: PortAudio's
+# own "system default" device selection was found to raise
+# PortAudioError [PaErrorCode -9999] "Unanticipated host error" / ALSA
+# buffer setup failure, so device=None can no longer be trusted -- these
+# are tried, in order, whenever the configured device is unset or fails
+# validation. Device indices on this ALSA/PipeWire setup are not stable
+# across process runs, so every candidate is still validated with
+# sd.check_input_settings() before use rather than assumed correct.
+_FALLBACK_INPUT_DEVICES: Tuple[int, ...] = (3, 4, 6, 7)
+
+# A stream that fails this many consecutive reads is treated as broken
+# (not a one-off transient blip) and is closed and reopened rather than
+# retried forever. Sandboxed/virtualized audio backends (this project's
+# own dev environment runs PipeWire emulating ALSA) have been observed
+# to occasionally enter a bad stream state after a successful open;
+# without this recovery path, the capture thread would otherwise loop
+# on .read() indefinitely, unable to ever produce audio again.
+_MAX_CONSECUTIVE_READ_FAILURES = 5
+_READ_FAILURE_BACKOFF_SECONDS = 0.5
 
 
 class AudioServiceError(Exception):
@@ -128,8 +150,16 @@ class AudioService:
             vad_handler: Every captured frame is forwarded to its
                 process_frame(); it self-gates on current_state, so
                 this is safe regardless of what state the robot is in.
-            device: sounddevice input device index, or None for the
-                system default.
+            device: sounddevice input device index to prefer (e.g.
+                config/settings.json's audio_input_device). Always
+                validated with sd.check_input_settings() before use;
+                if it is None or fails validation, _FALLBACK_INPUT_DEVICES
+                is probed in order and the first working device is
+                used instead -- PortAudio's own "system default" device
+                (device=None passed straight to sd.InputStream) is not
+                relied on, since it was found to raise
+                PortAudioError [PaErrorCode -9999] on this project's
+                own ALSA/PipeWire setup.
             capture_sample_rate: Force a specific capture rate; None
                 probes the device for a working rate (see start()).
             utterance_silence_ms: Trailing silence required to end an
@@ -151,6 +181,10 @@ class AudioService:
         self._stream: Optional[sd.InputStream] = None
         self._native_sample_rate: Optional[int] = None
         self._capture_blocksize: Optional[int] = None
+        # The device actually validated and opened, which may differ from
+        # self._device (the configured preference) if that preference was
+        # None or failed validation and a fallback device was used instead.
+        self._resolved_device: Optional[int] = None
 
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
@@ -179,31 +213,10 @@ class AudioService:
             AudioServiceError: if no usable input device/sample rate
                 combination can be opened.
         """
-        native_rate = self._resolve_capture_sample_rate()
-        blocksize = max(1, round(native_rate * VAD_FRAME_DURATION_MS / 1000))
-
-        try:
-            stream = sd.InputStream(
-                device=self._device, samplerate=native_rate, channels=1, dtype="int16", blocksize=blocksize
-            )
-            stream.start()
-        except Exception as exc:
-            raise AudioServiceError(f"Could not open microphone (device={self._device}): {exc}") from exc
-
-        self._stream = stream
-        self._native_sample_rate = native_rate
-        self._capture_blocksize = blocksize
-
+        self._open_stream()
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run, name="AudioThread", daemon=True)
         self._thread.start()
-        logger.info(
-            "Audio service started (device=%s, capture_rate=%dHz, blocksize=%d, resampling to %dHz)",
-            self._device,
-            native_rate,
-            blocksize,
-            VAD_SAMPLE_RATE,
-        )
 
     def stop(self) -> None:
         """Stop the capture loop and release the microphone."""
@@ -211,51 +224,216 @@ class AudioService:
         if self._thread is not None:
             self._thread.join(timeout=5.0)
             self._thread = None
-        if self._stream is not None:
-            self._stream.stop()
-            self._stream.close()
-            self._stream = None
+        self._close_stream()
         self._state.set_wake_word_status("inactive")
         logger.info("Audio service stopped")
 
-    def _resolve_capture_sample_rate(self) -> int:
-        """Determine a sample rate the input device actually supports.
+    def _open_stream(self) -> None:
+        """Resolve a working device+sample rate and open+start the InputStream.
+
+        Called by start(), and again by the capture loop's recovery
+        path (see _run()) when repeated reads fail -- so a stream that
+        has entered a broken state gets a real chance to recover
+        instead of looping on a dead stream object forever. Each call
+        re-validates the device from scratch (see
+        _resolve_capture_device_and_rate()), so a device that has
+        stopped working since the last open is detected here rather
+        than surfacing as a raw PortAudioError from stream.read().
+
+        Raises:
+            AudioServiceError: if no usable device/rate combination can
+                be opened.
+        """
+        device_index, native_rate = self._resolve_capture_device_and_rate()
+        blocksize = max(1, round(native_rate * VAD_FRAME_DURATION_MS / 1000))
+        device_name = self._describe_device(device_index)
+
+        logger.info(
+            "Opening microphone InputStream: device=%s [%s], channels=1, samplerate=%dHz, blocksize=%d, dtype=int16",
+            device_index,
+            device_name,
+            native_rate,
+            blocksize,
+        )
+        try:
+            stream = sd.InputStream(
+                device=device_index, samplerate=native_rate, channels=1, dtype="int16", blocksize=blocksize
+            )
+            stream.start()
+        except Exception as exc:
+            logger.error(
+                "InputStream failed to open (device=%s [%s], channels=1, samplerate=%dHz, blocksize=%d, "
+                "dtype=int16): %s: %s",
+                device_index,
+                device_name,
+                native_rate,
+                blocksize,
+                type(exc).__name__,
+                exc,
+                exc_info=True,
+            )
+            raise AudioServiceError(f"Could not open microphone (device={device_index} [{device_name}]): {exc}") from exc
+
+        logger.info(
+            "InputStream opened and started successfully (selected device index=%s [%s], samplerate=%.0fHz)",
+            device_index,
+            device_name,
+            stream.samplerate,
+        )
+
+        self._stream = stream
+        self._resolved_device = device_index
+        self._native_sample_rate = native_rate
+        self._capture_blocksize = blocksize
+        logger.info(
+            "Audio service started (device=%s [%s], capture_rate=%dHz, blocksize=%d, resampling to %dHz)",
+            device_index,
+            device_name,
+            native_rate,
+            blocksize,
+            VAD_SAMPLE_RATE,
+        )
+
+    def _close_stream(self) -> None:
+        """Stop and close the current InputStream, if any, so a fresh one can be opened."""
+        if self._stream is not None:
+            try:
+                self._stream.stop()
+                self._stream.close()
+            except Exception:
+                logger.exception("Error closing microphone stream")
+            self._stream = None
+            self._resolved_device = None
+
+    def _resolve_capture_device_and_rate(self) -> Tuple[int, int]:
+        """Pick a working input device and sample rate.
+
+        Tries the configured device (self._device, e.g. from
+        config/settings.json's audio_input_device) first, then falls
+        back to _FALLBACK_INPUT_DEVICES in order, validating every
+        candidate with sd.check_input_settings() before use -- never
+        passing device=None straight to sd.InputStream(), since
+        PortAudio's own "system default" selection was found to raise
+        PortAudioError [PaErrorCode -9999] (ALSA buffer setup failure)
+        on this project's own ALSA/PipeWire setup.
+
+        Raises:
+            AudioServiceError: if no candidate device/rate combination
+                validates successfully.
+        """
+        candidates: List[int] = []
+        if self._device is not None:
+            candidates.append(self._device)
+        for fallback_device in _FALLBACK_INPUT_DEVICES:
+            if fallback_device not in candidates:
+                candidates.append(fallback_device)
+
+        attempted_errors: List[str] = []
+        for device_index in candidates:
+            try:
+                rate = self._probe_device_sample_rate(device_index)
+                return device_index, rate
+            except AudioServiceError as exc:
+                attempted_errors.append(f"device={device_index}: {exc}")
+                logger.warning("Input device %s failed validation: %s", device_index, exc)
+
+        raise AudioServiceError(
+            f"No usable input device found (tried {candidates}): {'; '.join(attempted_errors)}"
+        )
+
+    def _probe_device_sample_rate(self, device_index: int) -> int:
+        """Validate one device with sd.check_input_settings(), returning a working sample rate.
 
         Real microphone hardware often does not support 16kHz capture
         directly (confirmed against this project's own test hardware,
         which only accepts 48kHz); this probes the device's reported
         default first, then a short list of common rates, checking
         each with sounddevice before committing to it.
+
+        Raises:
+            AudioServiceError: if this device supports none of the
+                candidate rates (including its own reported default).
         """
         if self._requested_sample_rate is not None:
+            sd.check_input_settings(
+                device=device_index, samplerate=self._requested_sample_rate, channels=1, dtype="int16"
+            )
             return self._requested_sample_rate
 
         try:
-            device_info = sd.query_devices(self._device, "input")
+            device_info = sd.query_devices(device_index, "input")
             candidate = int(device_info["default_samplerate"])
-            sd.check_input_settings(device=self._device, samplerate=candidate, channels=1, dtype="int16")
+            sd.check_input_settings(device=device_index, samplerate=candidate, channels=1, dtype="int16")
             return candidate
         except Exception:
-            logger.debug("Device default sample rate unusable; probing fallback rates")
+            logger.debug("Device %s default sample rate unusable; probing fallback rates", device_index)
 
         for rate in _FALLBACK_CAPTURE_SAMPLE_RATES:
             try:
-                sd.check_input_settings(device=self._device, samplerate=rate, channels=1, dtype="int16")
+                sd.check_input_settings(device=device_index, samplerate=rate, channels=1, dtype="int16")
                 return rate
             except Exception:
                 continue
 
-        raise AudioServiceError(f"No usable input sample rate found for device={self._device}")
+        raise AudioServiceError(f"No usable sample rate found for device={device_index}")
+
+    @staticmethod
+    def _describe_device(device_index: int) -> str:
+        """Return the human-readable device name for logging, or 'unknown' if it can't be queried."""
+        try:
+            return str(sd.query_devices(device_index)["name"])
+        except Exception:
+            return "unknown"
 
     def _run(self) -> None:
-        """Capture loop: read raw chunks continuously until stopped."""
+        """Capture loop: read raw chunks continuously until stopped, recovering from stream failures.
+
+        If self._stream is None (either never opened, or just closed
+        by the recovery path below), this tries to open a fresh one
+        every pass rather than asserting -- that would otherwise crash
+        the thread the moment a broken stream gets closed.
+        """
+        consecutive_failures = 0
         while not self._stop_event.is_set():
-            assert self._stream is not None and self._capture_blocksize is not None
-            try:
-                raw, _overflowed = self._stream.read(self._capture_blocksize)
-            except Exception:
-                logger.exception("Audio frame read failed")
+            if self._stream is None:
+                try:
+                    self._open_stream()
+                    consecutive_failures = 0
+                    logger.info("Microphone stream opened successfully; resuming capture")
+                except AudioServiceError:
+                    logger.exception("Still unable to open microphone stream; will keep retrying")
+                    time.sleep(_READ_FAILURE_BACKOFF_SECONDS)
                 continue
+
+            try:
+                raw, overflowed = self._stream.read(self._capture_blocksize)
+            except Exception as exc:
+                consecutive_failures += 1
+                logger.error(
+                    "Audio frame read failed (failure %d/%d before reopening; device=%s, "
+                    "samplerate=%s, blocksize=%s, dtype=int16, channels=1): %s: %s",
+                    consecutive_failures,
+                    _MAX_CONSECUTIVE_READ_FAILURES,
+                    self._resolved_device,
+                    self._native_sample_rate,
+                    self._capture_blocksize,
+                    type(exc).__name__,
+                    exc,
+                    exc_info=True,
+                )
+                if consecutive_failures >= _MAX_CONSECUTIVE_READ_FAILURES:
+                    logger.warning(
+                        "%d consecutive read failures; closing and reopening the microphone stream",
+                        consecutive_failures,
+                    )
+                    self._close_stream()
+                    consecutive_failures = 0
+                time.sleep(_READ_FAILURE_BACKOFF_SECONDS)
+                continue
+
+            consecutive_failures = 0
+            if overflowed:
+                logger.debug("Audio input buffer overflowed; some samples may have been dropped")
             self.process_chunk(raw.reshape(-1))
 
     def process_chunk(self, raw_native_rate_int16: np.ndarray) -> None:

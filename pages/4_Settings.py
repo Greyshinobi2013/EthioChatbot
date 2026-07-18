@@ -55,6 +55,19 @@ whisper_model = st.selectbox("Whisper model", WHISPER_MODEL_SIZES, index=whisper
 st.subheader("VAD Settings")
 vad_aggressiveness = st.slider("VAD aggressiveness", min_value=0, max_value=3, value=config.vad_aggressiveness)
 
+st.subheader("Audio Input Settings")
+audio_input_device = st.number_input(
+    "Microphone device index (-1 = auto-detect)",
+    min_value=-1,
+    value=config.audio_input_device if config.audio_input_device is not None else -1,
+    step=1,
+    help=(
+        "sounddevice input device index to prefer, e.g. 3. If unset (-1) "
+        "or the device fails validation at startup, utils/audio_service.py "
+        "automatically falls back to probing known-working device indices."
+    ),
+)
+
 st.subheader("Timeout Settings")
 conversation_timeout = st.number_input(
     "Conversation timeout (seconds)", min_value=1, value=config.conversation_timeout, step=1
@@ -71,6 +84,7 @@ if st.button("Save Settings", type="primary"):
         face_lost_timeout=int(face_lost_timeout),
         vad_aggressiveness=int(vad_aggressiveness),
         conversation_timeout=int(conversation_timeout),
+        audio_input_device=int(audio_input_device) if int(audio_input_device) >= 0 else None,
     )
     try:
         save_configuration(updated_config)
