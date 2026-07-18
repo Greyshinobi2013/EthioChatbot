@@ -27,6 +27,33 @@ and are filled in deliberately:
   outcome of FACE_LOST_CHECK; there is no cataloged event for the
   "users remain" outcome. FACE_LOST_CHECK_PASSED is introduced here
   as the event a future presence check publishes for that outcome.
+
+Conversation Acknowledgement feature (added after the initial 12-state
+design): two new states, PLAYING_ACKNOWLEDGMENT and
+WAITING_FOR_FIRST_QUESTION, are inserted between WAKE_WORD_DETECTED and
+CONVERSATION_ACTIVE so a single universal audio/common/yes.wav plays
+and finishes before the system starts listening for the user's first
+question:
+
+- (WAITING_FOR_WAKE_WORD, WAKE_WORD_DETECTED) -> PLAYING_ACKNOWLEDGMENT
+  (previously -> CONVERSATION_ACTIVE directly).
+- (PLAYING_ACKNOWLEDGMENT, PLAYBACK_FINISHED) -> WAITING_FOR_FIRST_QUESTION:
+  reuses the existing PlaybackService/PLAYBACK_FINISHED event already
+  used by (PLAYING_AUDIO, PLAYBACK_FINISHED) -- the two coexist without
+  conflict because transitions are keyed by (state, event), not event
+  alone.
+- (WAITING_FOR_FIRST_QUESTION, TRANSCRIPTION_READY) -> CONVERSATION_ACTIVE:
+  reuses the existing TRANSCRIPTION_READY event (already published by
+  utils/whisper_utils.py for every captured utterance during
+  CONVERSATION_ACTIVE; utils/audio_service.py now also captures
+  utterances during WAITING_FOR_FIRST_QUESTION the same way). Once in
+  CONVERSATION_ACTIVE, utils/scenario_engine.py's own pre-existing
+  TRANSCRIPTION_READY subscriber runs unmodified and unaware anything
+  changed -- this relies on FiniteStateMachine being constructed before
+  ScenarioEngine/ConversationManager (see app.py's startup() vs.
+  start_full_system() ordering), so this transition always applies
+  before scenario matching runs, exactly as every other
+  STATE_CHANGED-reacting subscriber in this codebase already depends on.
 """
 from __future__ import annotations
 
