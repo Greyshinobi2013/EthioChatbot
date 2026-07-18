@@ -51,6 +51,14 @@ WAKE_WORDS: Dict[str, Tuple[str, ...]] = {
 
 SUPPORTED_LANGUAGES = tuple(WAKE_WORDS.keys())
 
+# Minimum RMS (of normalized [-1, 1] float32 audio) below which an
+# utterance is treated as silence/noise-floor rather than real speech and
+# rejected before reaching Whisper. Picked well below typical speech RMS
+# (commonly > 0.02) but well above true silence/noise-floor level (~0.0001,
+# the level observed alongside the "logits ... invalid values: nan" crash
+# this threshold was added to prevent).
+_MIN_UTTERANCE_RMS = 0.005
+
 
 def normalize_text(text: str) -> str:
     """Normalize transcribed text for wake-word/scenario matching.
@@ -157,6 +165,11 @@ class WhisperService:
     def transcribe(self, audio: np.ndarray, language: Optional[str] = None) -> Tuple[str, str]:
         """Transcribe an audio buffer.
 
+        The single call point both detect_wake_word() and
+        transcribe_and_publish() go through, so audio-safety logging
+        and validation live here rather than being duplicated in both
+        callers.
+
         Args:
             audio: Mono float32 PCM samples at WHISPER_SAMPLE_RATE
                 (16kHz), normalized to [-1, 1], per Whisper's expected
@@ -165,10 +178,74 @@ class WhisperService:
                 "en"); None lets Whisper auto-detect from the audio.
 
         Returns:
-            (whisper_detected_language_code, raw_transcribed_text)
+            (whisper_detected_language_code, raw_transcribed_text).
+            ("", "") if the audio was rejected before being handed to
+            Whisper (see _audio_rejection_reason) -- callers already
+            treat an empty transcription as "no speech recognized", so
+            this needs no special-case handling downstream.
         """
+        self._log_audio_stats(audio)
+
+        rejection_reason = self._audio_rejection_reason(audio)
+        if rejection_reason is not None:
+            logger.warning("Rejecting utterance before Whisper: %s", rejection_reason)
+            return "", ""
+
         result = self._model.transcribe(audio, language=language, fp16=False)
         return result.get("language", ""), result.get("text", "")
+
+    @staticmethod
+    def _log_audio_stats(audio: np.ndarray) -> None:
+        """Log shape/dtype/min/max/mean/NaN-count/Inf-count for every buffer handed to Whisper.
+
+        Whisper's decoder has been observed to crash with
+        "ValueError: Expected parameter logits ... found invalid
+        values: tensor([[nan, nan, ...]])" on certain malformed input
+        (see _audio_rejection_reason); this makes the actual input
+        that triggered it visible in logs without needing to
+        reproduce the failure interactively.
+        """
+        nan_count = int(np.isnan(audio).sum()) if audio.size else 0
+        inf_count = int(np.isinf(audio).sum()) if audio.size else 0
+        logger.info(
+            "AUDIO_STATS: shape=%s dtype=%s min=%s max=%s mean=%s nan_count=%d inf_count=%d",
+            audio.shape,
+            audio.dtype,
+            f"{np.min(audio):.6f}" if audio.size else "n/a",
+            f"{np.max(audio):.6f}" if audio.size else "n/a",
+            f"{np.mean(audio):.6f}" if audio.size else "n/a",
+            nan_count,
+            inf_count,
+        )
+
+    @staticmethod
+    def _audio_rejection_reason(audio: np.ndarray) -> Optional[str]:
+        """Return why `audio` is unsafe to hand to Whisper, or None if it is safe.
+
+        Whisper's internal log-mel spectrogram computation takes
+        log() of the STFT magnitude; for empty, all-(near-)zero, or
+        otherwise degenerate audio that magnitude can be zero or
+        exactly repeated, producing -inf/NaN internally that then
+        propagates through the encoder/decoder as NaN logits -- a
+        crash, not a graceful "no speech" result. All three of these
+        conditions (empty buffer, NaN/Inf already present from a
+        capture/resampling fault, or near-silent audio at/below the
+        noise floor) are exactly the kind of degenerate input that
+        triggers it, so they are rejected here before ever reaching
+        self._model.transcribe().
+        """
+        if audio.size == 0:
+            return "audio buffer is empty"
+        if np.isnan(audio).any():
+            return "audio contains NaN values"
+        if np.isinf(audio).any():
+            return "audio contains Inf values"
+
+        rms = float(np.sqrt(np.mean(np.square(audio, dtype=np.float64))))
+        if rms < _MIN_UTTERANCE_RMS:
+            return f"audio is silent/near-silent (rms={rms:.6f}, below minimum {_MIN_UTTERANCE_RMS})"
+
+        return None
 
     def detect_wake_word(self, audio: np.ndarray) -> Optional[WakeWordMatch]:
         """Transcribe audio and check it against the wake-word catalog.
