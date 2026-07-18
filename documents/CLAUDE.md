@@ -1,748 +1,863 @@
-# ETHIOCHATBOT V2
+# CLAUDE.md
 
-## ROLE
-
-You are acting as:
-
-- Principal Software Architect
-- Senior Python Engineer
-- Robotics Software Engineer
-- Computer Vision Engineer
-- Speech Processing Engineer
-- Technical Lead
-
-You are solely responsible for delivering a COMPLETE WORKING ETHIOCHATBOT V2 DEMONSTRATION.
-
-Your objective is not to build a perfect production system.
-
-Your objective is to deliver a fully integrated, stable, offline conversational robot that can be demonstrated successfully.
+# EthioChatbot V3
+## Claude Code Implementation Contract
 
 ---
 
-# PROJECT GOAL
+# Purpose
 
-Build a fully offline conversational robot that can:
+This file provides mandatory implementation instructions for Claude Code.
 
-- Detect multiple faces
-- Recognize enrolled users
-- Prioritize users
-- Greet users sequentially
-- Listen for multilingual wake words
-- Activate conversations
-- Perform speech recognition using Whisper
-- Match user speech to predefined scenarios
-- Play prerecorded responses
-- Handle interruptions
-- Resume playback
-- Detect face disappearance
-- Maintain conversation context
-- Return to idle when users leave
+It acts as a contract between the project owner and Claude Code.
 
-The final result must be demonstratable end-to-end.
+Before writing, modifying, deleting, or refactoring code, Claude Code must read and follow this document.
 
 ---
 
-# IMPLEMENTATION DEADLINE
+# Project Identity
 
-Target Development Time:
+Project Name:
 
-5 Hours
+```text
+EthioChatbot V3
+```
 
-This is a demonstration project.
+Project Type:
 
-Prioritize:
+```text
+Offline Face Recognition System
+```
 
-1. End-to-end functionality
-2. Integration
-3. Stability
-4. Raspberry Pi deployment readiness
-5. Maintainability
+Purpose:
 
-Not prioritized:
-
-- Enterprise scalability
-- Distributed systems
-- Cloud deployment
-- Experimental optimizations
-
-When implementation choices exist, choose the simplest implementation that satisfies the requirements.
-
----
-
-# SOURCE OF TRUTH
-
-Read all project documentation that are found in 'md documents'/ directory before implementing.
-
-Required Documents:
-
-1. README.md
-2. ARCHITECTURE.md
-3. STATE_MACHINE.md
-4. EVENTS.md
-5. SCENARIOS.md
-6. DEMO_SCRIPT.md
-7. ACCEPTANCE_TESTS.md
-8. IMPLEMENTATION_PLAN.md
-
-README.md is the primary source of truth.
-
-Do not contradict any specification.
-
----
-
-# PROJECT TYPE
-
-EthioChatbot V2 is NOT:
-
-- ChatGPT
-- Claude Chatbot
-- GPT System
-- Generative AI
-- Ollama
-- RAG
-- Vector Search
-- Text Generator
-- TTS Engine
-
-EthioChatbot V2 is:
-
-- Offline
-- Deterministic
-- Event Driven
-- Scenario Based
-- State Machine Controlled
-- Audio Replay Based
-
----
-
-# CONVERSATION MODEL
-
-The robot never generates responses.
-
-Every response already exists as a prerecorded audio file.
-
-Workflow:
-
-User Speech
-
+```text
+Recognize registered users
 ↓
+Sort users by priority
+↓
+Play greetings
+↓
+Play informational dialogs
+↓
+Monitor user presence
+```
 
+EthioChatbot V3 is NOT a conversational AI system.
+
+---
+
+# Mandatory Documents
+
+Before implementing any feature, read the following files completely:
+
+```text
+documents/
+
+PROJECT_SPECIFICATION_V3.md
+
+STATE_MACHINE_V3.md
+
+SYSTEM_ARCHITECTURE_V3.md
+
+AUDIO_STRUCTURE_V3.md
+
+ACCEPTANCE_TESTS_V3.md
+
+DEVELOPMENT_RULES_V3.md
+
+IMPLEMENTATION_GUIDE_V3.md
+```
+
+These files are the source of truth.
+
+---
+
+# Documentation Hierarchy
+
+If documentation appears to conflict:
+
+Priority order:
+
+```text
+PROJECT_SPECIFICATION_V3.md
+↓
+STATE_MACHINE_V3.md
+↓
+SYSTEM_ARCHITECTURE_V3.md
+↓
+IMPLEMENTATION_GUIDE_V3.md
+↓
+AUDIO_STRUCTURE_V3.md
+↓
+DEVELOPMENT_RULES_V3.md
+↓
+ACCEPTANCE_TESTS_V3.md
+```
+
+Always follow the higher-priority document.
+
+---
+
+# Project Scope
+
+Implement ONLY what is described in the V3 documents.
+
+Do not invent features.
+
+Do not extend requirements.
+
+Do not redesign the system.
+
+---
+
+# Existing Repository Structure
+
+The repository structure is intentional.
+
+Do not reorganize folders unless explicitly required.
+
+Current architecture:
+
+```text
+app.py
+
+audio/
+config/
+documents/
+faces/
+logs/
+models/
+pages/
+utils/
+```
+
+Keep the structure intact.
+
+---
+
+# Features To Implement
+
+The following features SHALL be implemented.
+
+```text
+Face Detection
+
+Face Recognition
+
+Face Enrollment
+
+Multi-User Recognition
+
+Priority Sorting
+
+Greeting Queue
+
+Greeting Persistence
+
+Face Presence Tracking
+
+Face Lost Detection
+
+Mode A
+
+Mode B
+
+Playback Queue
+
+Dialog Playback
+
+Dialog Interruption
+
+Monitoring Mode
+
+Dashboard
+
+Settings
+```
+
+---
+
+# Features Explicitly Forbidden
+
+The following features shall NOT exist in EthioChatbot V3.
+
+Do not implement them.
+
+Do not add placeholders for them.
+
+Do not leave partial code for them.
+
+```text
 Whisper
 
-↓
+Speech-To-Text (STT)
 
-Transcription
+Wake Words
 
-↓
+Voice Commands
 
-Normalize Text
+Voice Interaction
 
-↓
+RNNoise
 
-Scenario Match
+VAD
 
-↓
+Language Detection
 
-Locate Audio File
+Conversational AI
 
-↓
+Question Answering
 
-Play Audio
+Scenario Engine
 
-No generated responses are permitted.
+Conversation Manager
 
----
+Large Language Models
 
-# MULTI-FACE REQUIREMENTS
+Cloud Processing
 
-The system must support multiple recognized users.
-
-Example:
-
-Manager
-Natnael
-Visitor
-
-Workflow:
-
-Recognize Users
-
-↓
-
-Sort By Priority
-
-↓
-
-Sequential Greeting
-
-↓
-
-WAITING_FOR_WAKE_WORD
-
-Priority values:
-
-Lower Number = Higher Priority
-
-Example:
-
-Priority 1
-
-↓
-
-Priority 2
-
-↓
-
-Priority 3
+Remote AI APIs
+```
 
 ---
 
-# GREETING RULES
+# Core Design Philosophy
 
-Greeting language is always:
+EthioChatbot V3 must remain:
 
-English
+```text
+Offline
 
-Greeting occurs automatically.
+Simple
 
-No user interaction required.
+Deterministic
 
-Example:
+Maintainable
 
-Hello Manager.
+Raspberry Pi Friendly
+```
 
-↓
+When choosing between two solutions:
 
-Hello Natnael.
+Prefer:
 
-↓
-
-Hello Visitor.
-
-↓
-
-WAITING_FOR_WAKE_WORD
+```text
+Simpler Solution
+```
 
 ---
 
-# LANGUAGE ACTIVATION MODEL
+# Existing Modules
 
-There is NO Language Selection State.
+These files already exist and should be reused whenever possible.
 
-Wake words determine language.
+```text
+camera_service.py
 
-Examples:
+face_recognition.py
 
-English:
+face_enrollment.py
 
-Hello Robot
+event_bus.py
 
-↓
+state_manager.py
 
-English Session
+fsm.py
 
-Amharic:
+playback.py
 
-ሰላም ሮቦት
+logger.py
+```
 
-↓
-
-Amharic Session
-
-Arabic:
-
-مرحبا روبوت
-
-↓
-
-Arabic Session
-
-Conversation language becomes:
-
-current_language
+Avoid rewriting them unless absolutely necessary.
 
 ---
 
-# LANGUAGE PRIORITY RULE
+# New Core Modules
 
-Conversation language determination:
+The primary implementation effort should focus on:
 
-1. Wake Word Language
-2. User Preferred Language
-3. English
+```text
+greeting_manager.py
 
-Example:
+priority_manager.py
 
-User Preferred Language:
+face_presence_manager.py
+```
 
-Amharic
-
-User Says:
-
-ሰላም ሮቦት
-
-Conversation Language:
-
-Amharic
+These modules are central to V3.
 
 ---
 
-# FACE PERSISTENCE RULE
-
-Each recognized user must maintain:
-
-last_seen timestamp
-
-When visible:
-
-last_seen updated.
-
-When invisible:
-
-last_seen stops updating.
-
-Recommended timeout:
-
-5 seconds
-
-After timeout:
-
-FACE_LOST event generated.
+# Face Recognition Requirements
 
 ---
 
-# IDLE RULE
-
-The robot MUST NOT return to IDLE while recognized users remain visible.
-
-Workflow:
-
-Conversation Timeout
-
-↓
-
-WAITING_FOR_WAKE_WORD
-
-↓
-
-Users Still Present?
-
-↓
-
-YES
-
-↓
-
-WAITING_FOR_WAKE_WORD
-
-↓
-
-NO
-
-↓
-
-RETURN_TO_IDLE
-
-↓
-
-IDLE
-
----
-
-# INTERRUPTION RULE
-
-During response playback:
-
-response.wav
-
-↓
-
-User Speaks
-
-↓
-
-VAD Detects Speech
-
-↓
-
-Pause Playback
-
-↓
-
-Play please_wait.wav
-
-↓
-
-Wait For Silence
-
-↓
-
-Resume Original Playback
-
-Playback must resume from the exact position.
-
-Playback must not restart.
-
----
-
-# STREAMLIT RULES
-
-Streamlit is NOT the robot.
-
-Streamlit is:
-
-- Dashboard
-- Monitoring Interface
-- Configuration Interface
-- Administration Interface
-
-Streamlit must never perform:
-
-- Face Recognition
-- Whisper Inference
-- VAD Processing
-- Scenario Matching
-- State Transitions
-
-Business logic belongs in service modules.
-
----
-
-# IMPLEMENTATION RULES
-
-Implement milestone by milestone.
-
-Do not skip milestones.
-
-After each milestone:
-
-1. Verify imports
-2. Verify startup
-3. Verify integration
-4. Verify feature functionality
-5. Produce summary report
-
-Stop after milestone completion.
-
-Do not automatically continue.
-
----
-
-# RASPBERRY PI 4 DEPLOYMENT PROFILE
-
-Target Hardware:
-
-- Raspberry Pi 4
-- 8 GB RAM
-- 32 GB Storage
-- 1.8 GHz CPU
-
-All implementation decisions should support Raspberry Pi deployment.
-
----
-
-# REQUIRED OPTIMIZATIONS
-
-## Camera
+## Face Detection
 
 Use:
 
-640 x 480
+```text
+MediaPipe Face Detection
+```
 
-Do not default to:
+Requirements:
 
-1920 x 1080
+```text
+Real-Time
 
-unless explicitly configured.
+Multi-Face
+
+Frontal Faces
+
+Side Faces
+```
 
 ---
 
 ## Face Recognition
 
-Detect:
-
-Every Frame
-
-Recognize:
-
-Every 10th Frame
-
-This reduces CPU load.
-
----
-
-## Whisper
-
 Use:
 
-base
+```text
+ArcFace
 
-Model
+(InsightFace)
+```
 
-by default.
+Requirements:
 
-This supports:
+```text
+High Accuracy
 
-- English
-- Amharic
-- Arabic
+Stable Recognition
 
-while remaining efficient.
-
----
-
-## Scenario Cache
-
-Load all scenarios during startup.
-
-Create cached lookup dictionaries.
-
-Reuse throughout runtime.
-
-Do not repeatedly load JSON files.
+Multi-Angle Support
+```
 
 ---
 
-## Face Embedding Cache
+## Enrollment
 
-Load face embeddings once.
+Each user shall support:
 
-Reuse throughout runtime.
+```text
+Front Face
 
-Do not regenerate embeddings repeatedly.
+Left Face
 
----
+Right Face
+```
 
-## Language Context Cache
+Do not assume:
 
-Store:
-
-current_language
-
-Use language context for:
-
-- Speech Recognition
-- Scenario Matching
-- Audio Selection
-
-Reset only on timeout or idle.
+```text
+Single Image Enrollment
+```
 
 ---
 
-## Memory Policy
+# User Profiles
 
-Keep:
+Users contain:
 
-- latest_frame
-- latest_audio_chunk
+```text
+User ID
 
-Avoid:
+Priority
 
-- frame_history
-- audio_history
-- duplicate frame storage
+Preferred Language
 
-Memory efficiency is important.
+Embeddings
 
----
+Greeting Audio
 
-# TECHNICAL REQUIREMENTS
+Dialog Audio
+```
 
-Use:
+Stored in:
 
-Python 3.11+
-
-Type Hints
-
-Docstrings
-
-Logging
-
-Exception Handling
-
-Pathlib
-
-Threading
-
-Configuration Files
-
-Reusable Modules
+```text
+faces/users.json
+```
 
 ---
 
-# APPROVED TECHNOLOGIES
+# Supported Languages
 
-Frontend:
+Only:
 
-- Streamlit
+```text
+English
 
-Computer Vision:
+Amharic
 
-- OpenCV
-- Dlib
-- NumPy
+Arabic
+```
 
-Speech Recognition:
+Language comes from:
 
-- Whisper
+```text
+Enrollment Profile
+```
 
-Voice Activity Detection:
-
-- WebRTC VAD
-- sounddevice
-
-Audio:
-
-- pygame
-
-Utilities:
-
-- pathlib
-- logging
-- threading
-- json
-
-Do not replace approved technologies.
+Do not perform runtime language detection.
 
 ---
 
-# CODE QUALITY RULES
+# Priority Rules
 
-Required:
+Lower number means higher priority.
 
-- Type hints
-- Error handling
-- Logging
-- Reusable modules
-- Configuration driven behavior
+Example:
 
-Prohibited:
+```text
+Priority 1
+↓
+Priority 2
+↓
+Priority 3
+```
 
-- TODO comments
-- Placeholder implementations
-- Mock functionality
-- Hardcoded paths
-- Hardcoded settings
+Correct order:
 
-Every generated function must work.
+```text
+1
+↓
+2
+↓
+3
+```
+
+Never reverse this behavior.
 
 ---
 
-# EVENT DRIVEN REQUIREMENTS
+# Greeting Rules
 
-All communication between services occurs through the Event Bus.
+Users must be greeted sequentially.
 
-Examples:
+Example:
 
-FACE_DETECTED
+```text
+Manager Greeting
+↓
+Natnael Greeting
+↓
+Visitor Greeting
+```
 
-FACE_RECOGNIZED
+Audio overlap is prohibited.
 
+---
+
+# Greeting Persistence
+
+A user may only be greeted once during a presence session.
+
+Allowed:
+
+```text
+Appear
+↓
+Greeting
+↓
+Remain Visible
+```
+
+Not Allowed:
+
+```text
+Appear
+↓
+Greeting
+↓
+Greeting Again
+```
+
+without leaving first.
+
+---
+
+# Face Presence Rules
+
+Configuration:
+
+```json
+{
+    "face_lost_timeout": 5
+}
+```
+
+Behavior:
+
+```text
+Face Missing
+↓
+Timer
+↓
+FACE_LOST
+```
+
+Temporary disappearance must not trigger:
+
+```text
 FACE_LOST
 
-WAKE_WORD_DETECTED
+Re-Greeting
 
-SCENARIO_MATCHED
-
-PLAYBACK_STARTED
-
-INTERRUPTION_DETECTED
-
-TIMEOUT_OCCURRED
-
-Services should communicate through events.
-
-Avoid direct service coupling.
+Session Reset
+```
 
 ---
 
-# STATE MACHINE REQUIREMENTS
+# Interaction Modes
 
-The FSM controls robot behavior.
+EthioChatbot V3 supports exactly two modes.
 
-Use STATE_MACHINE.md as the authority.
-
-All transitions must:
-
-- Be validated
-- Be logged
-- Be event driven
-
-Invalid transitions must:
-
-- Be rejected
-- Be logged
+No additional modes may be created.
 
 ---
 
-# TESTING REQUIREMENTS
+## Mode A
 
-Run:
+```text
+All Greetings
+↓
+Common Dialog
+```
 
-ACCEPTANCE_TESTS.md
+Configuration:
 
-Run:
-
-DEMO_SCRIPT.md
-
-Fix failing items before proceeding.
-
-The project is not complete until all acceptance criteria pass.
-
----
-
-# DEVELOPMENT PROCESS
-
-Before implementing any feature:
-
-1. Read affected specifications.
-2. Explain implementation plan briefly.
-3. Implement complete code.
-4. Verify imports.
-5. Verify integration.
-6. Verify functionality.
-7. Produce result summary.
-
-Then stop.
+```json
+{
+    "interaction_mode": "common_dialog"
+}
+```
 
 ---
 
-# END CONDITION
+## Mode B
 
-EthioChatbot V2 is complete only when:
+```text
+Greeting
+↓
+User Dialog
 
-✓ Multiple faces recognized
+↓
 
-✓ Users prioritized correctly
+Greeting
+↓
+User Dialog
+```
 
-✓ Greetings occur sequentially
+Configuration:
 
-✓ Wake words work
+```json
+{
+    "interaction_mode": "user_specific_dialog"
+}
+```
 
-✓ English conversation works
+---
 
-✓ Amharic conversation works
+# Dialog Interruption Framework
 
-✓ Arabic conversation works
+Applies only to:
 
-✓ Whisper STT works
+```text
+Dialog Playback
+```
 
-✓ Scenario matching works
+Not:
 
-✓ Correct audio plays
+```text
+Greeting Playback
+```
 
-✓ Interruption handling works
+Required operations:
 
-✓ Playback resumes correctly
+```text
+Pause
 
-✓ Face disappearance works
+Resume
 
-✓ WAITING_FOR_WAKE_WORD persists while users remain visible
+Continue Playback
+```
 
-✓ IDLE occurs when all users leave
+Resume must continue from the previous playback position.
 
-✓ Raspberry Pi deployment profile satisfied
+Never restart automatically.
 
-✓ Full demonstration succeeds
+---
 
-Do not consider the project complete until every acceptance criterion passes.
+# FSM Rules
+
+FSM implementation must follow:
+
+```text
+STATE_MACHINE_V3.md
+```
+
+exactly.
+
+Do not:
+
+```text
+Skip States
+
+Merge States
+
+Create Undocumented States
+```
+
+State transitions must be logged.
+
+---
+
+# Event Bus Rules
+
+Use:
+
+```text
+event_bus.py
+```
+
+for component communication.
+
+Prefer:
+
+```text
+Publish Event
+↓
+Subscribe Event
+↓
+Action
+```
+
+Avoid direct coupling between modules.
+
+---
+
+# Dashboard Rules
+
+Dashboard must remain lightweight.
+
+Dashboard responsibilities:
+
+```text
+Display Status
+
+Display Users
+
+Display Playback
+
+Change Settings
+
+Switch Modes
+```
+
+Dashboard must not contain business logic.
+
+---
+
+# Audio Rules
+
+Follow:
+
+```text
+AUDIO_STRUCTURE_V3.md
+```
+
+exactly.
+
+Supported folders:
+
+```text
+audio/english/
+
+audio/amharic/
+
+audio/arabic/
+
+audio/common/
+```
+
+Greeting audio:
+
+```text
+greetings/
+```
+
+Dialog audio:
+
+```text
+dialogs/
+```
+
+---
+
+# Error Handling Rules
+
+The system must continue running after:
+
+```text
+Missing Audio
+
+Invalid User
+
+Playback Error
+
+Camera Error
+
+Missing Embeddings
+```
+
+Log errors.
+
+Avoid crashes.
+
+---
+
+# Logging Rules
+
+Log:
+
+```text
+State Changes
+
+Recognition Events
+
+Greeting Events
+
+Playback Events
+
+Face Lost Events
+
+Errors
+```
+
+Avoid noisy logging.
+
+---
+
+# Raspberry Pi Rules
+
+Target Hardware:
+
+```text
+Raspberry Pi 4
+
+8GB RAM
+
+32GB Storage
+
+1.8GHz CPU
+```
+
+Optimization priorities:
+
+```text
+Recognition Accuracy
+↓
+Recognition Stability
+↓
+Playback Reliability
+↓
+Responsiveness
+```
+
+Avoid unnecessary CPU-intensive designs.
+
+---
+
+# Validation Requirement
+
+Before declaring work complete:
+
+Validate against:
+
+```text
+ACCEPTANCE_TESTS_V3.md
+```
+
+Every critical test must pass.
+
+---
+
+# Required Final Reports
+
+Upon completion generate:
+
+---
+
+## Files Modified Report
+
+```text
+Created Files
+
+Modified Files
+
+Removed Files
+```
+
+---
+
+## Validation Report
+
+```text
+Passed Tests
+
+Failed Tests
+
+Known Issues
+```
+
+---
+
+## Demo Readiness Report
+
+```text
+Complete Feature List
+
+System Status
+
+Deployment Readiness
+```
+
+---
+
+# Final Instruction
+
+If a feature is not described in:
+
+```text
+PROJECT_SPECIFICATION_V3.md
+```
+
+then:
+
+```text
+DO NOT IMPLEMENT IT.
+```
+
+Favor:
+
+```text
+Simplicity
+
+Maintainability
+
+Offline Operation
+
+Code Reuse
+
+Raspberry Pi Compatibility
+```
+
+over introducing new complexity.
+
+---
+
+# End of File

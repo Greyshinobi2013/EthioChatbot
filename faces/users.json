@@ -1,23 +1,9 @@
-[
-  {
-    "user_id": "Mr. Natnael Getachew",
-    "priority": 1,
-    "preferred_language": "english",
-    "image_path": "faces/images/Mr. Natnael Getachew.jpg",
-    "embedding_path": "faces/embeddings/Mr. Natnael Getachew.npy"
-  },
-  {
-    "user_id": "Doctor chernet",
-    "priority": 2,
-    "preferred_language": "english",
-    "image_path": "faces/images/Doctor chernet.jpg",
-    "embedding_path": "faces/embeddings/Doctor chernet.npy"
-  },
-  {
-    "user_id": "Biruk",
-    "priority": 2,
-    "preferred_language": "english",
-    "image_path": "faces/images/Biruk.jpg",
-    "embedding_path": "faces/embeddings/Biruk.npy"
-  }
-]
+{
+  "users": [
+    {
+      "user_id": "natnael",
+      "priority": 2,
+      "preferred_language": "amharic"
+    }
+  ]
+}
