@@ -16,8 +16,11 @@ from __future__ import annotations
 
 import re
 import threading
+import time
 import unicodedata
+import wave
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 import numpy as np
@@ -30,6 +33,14 @@ from utils.state_manager import StateManager
 logger = get_logger(__name__)
 
 DEFAULT_MODEL_SIZE = "base"
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+# Failing audio buffers are saved here (as playable WAV files) whenever
+# self._model.transcribe() itself raises, so the exact waveform that
+# triggered a crash can be inspected/replayed later rather than only
+# described by log statistics. Created on first use, not at import time.
+DEBUG_AUDIO_DIR = PROJECT_ROOT / "debug_audio"
 
 # Whisper's target sample rate; audio fed to transcribe()/detect_wake_word()
 # must be mono float32 PCM in [-1, 1] at this rate.
@@ -192,9 +203,13 @@ class WhisperService:
         Returns:
             (whisper_detected_language_code, raw_transcribed_text).
             ("", "") if the audio was rejected before being handed to
-            Whisper (see _audio_rejection_reason) -- callers already
-            treat an empty transcription as "no speech recognized", so
-            this needs no special-case handling downstream.
+            Whisper (see _audio_rejection_reason), or if
+            self._model.transcribe() itself raised (see
+            _save_debug_audio) -- callers already treat an empty
+            transcription as "no speech recognized", so this needs no
+            special-case handling downstream. Whisper crashing is never
+            allowed to propagate and take down the capture/utterance
+            thread that called this.
         """
         self._log_audio_stats(audio)
 
@@ -203,8 +218,67 @@ class WhisperService:
             logger.warning("Rejecting utterance before Whisper: %s", rejection_reason)
             return "", ""
 
-        result = self._model.transcribe(audio, language=language, fp16=False)
+        # Diagnostics immediately before the actual Whisper call: this
+        # is audio that already passed every existing guard (non-empty,
+        # long enough, no NaN/Inf, not near-silent) -- if a crash still
+        # happens on input logged here, this is the exact input to
+        # investigate, not a hypothetical one further upstream.
+        peak = float(np.max(np.abs(audio))) if audio.size else 0.0
+        duration_ms = len(audio) / WHISPER_SAMPLE_RATE * 1000.0
+        rms = float(np.sqrt(np.mean(np.square(audio, dtype=np.float64)))) if audio.size else 0.0
+        logger.info(
+            "PRE_TRANSCRIBE_DIAGNOSTIC: shape=%s len=%d dtype=%s rms=%.6f peak=%.6f duration_ms=%.1f language=%s",
+            audio.shape,
+            len(audio),
+            audio.dtype,
+            rms,
+            peak,
+            duration_ms,
+            language,
+        )
+
+        try:
+            result = self._model.transcribe(audio, language=language, fp16=False)
+        except Exception as exc:
+            logger.exception(
+                "Whisper crashed on an utterance that passed all pre-transcribe guards "
+                "(len=%d rms=%.6f peak=%.6f duration_ms=%.1f language=%s): %s",
+                len(audio),
+                rms,
+                peak,
+                duration_ms,
+                language,
+                exc,
+            )
+            self._save_debug_audio(audio, language)
+            return "", ""
+
         return result.get("language", ""), result.get("text", "")
+
+    @staticmethod
+    def _save_debug_audio(audio: np.ndarray, language: Optional[str]) -> None:
+        """Save an audio buffer that crashed Whisper to DEBUG_AUDIO_DIR as a playable WAV.
+
+        Best-effort: a failure to save (e.g. a read-only filesystem)
+        is logged and swallowed rather than raised, since this runs
+        inside an already-caught exception handler and must not itself
+        crash the caller.
+        """
+        try:
+            DEBUG_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+            filename = f"whisper_crash_{time.time():.6f}_lang-{language or 'auto'}.wav"
+            path = DEBUG_AUDIO_DIR / filename
+
+            audio_int16 = np.clip(audio.astype(np.float64) * 32768.0, -32768, 32767).astype(np.int16)
+            with wave.open(str(path), "wb") as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)
+                wav_file.setframerate(WHISPER_SAMPLE_RATE)
+                wav_file.writeframes(audio_int16.tobytes())
+
+            logger.warning("Saved failing Whisper input audio to %s for investigation", path)
+        except Exception:
+            logger.exception("Failed to save debug audio for a Whisper crash (continuing without it)")
 
     @staticmethod
     def _log_audio_stats(audio: np.ndarray) -> None:

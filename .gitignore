@@ -6,5 +6,6 @@ __pycache__/
 venv/
 logs/*.log
 .streamlit/
+debug_audio/
 
 models/*.dat
