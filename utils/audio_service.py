@@ -39,7 +39,7 @@ import numpy as np
 import sounddevice as sd
 
 from utils.event_bus import EventBus
-from utils.fsm import CONVERSATION_ACTIVE, WAITING_FOR_WAKE_WORD
+from utils.fsm import CONVERSATION_ACTIVE, WAITING_FOR_FIRST_QUESTION, WAITING_FOR_WAKE_WORD
 from utils.logger import get_logger
 from utils.noise_suppression import NoiseSuppressor
 from utils.state_manager import StateManager
@@ -570,7 +570,14 @@ class AudioService:
         if current_state == WAITING_FOR_WAKE_WORD:
             self._state.set_wake_word_status("listening")
             self._accumulate_utterance(frame_bytes, frame_16k, is_speech, self._finish_wake_word_utterance)
-        elif current_state == CONVERSATION_ACTIVE:
+        elif current_state in (CONVERSATION_ACTIVE, WAITING_FOR_FIRST_QUESTION):
+            # WAITING_FOR_FIRST_QUESTION (Conversation Acknowledgement
+            # feature) captures the user's first question exactly like
+            # any other CONVERSATION_ACTIVE utterance -- same forced-
+            # language transcription via _finish_conversation_utterance,
+            # whose TRANSCRIPTION_READY is what utils/fsm.py's
+            # (WAITING_FOR_FIRST_QUESTION, TRANSCRIPTION_READY) ->
+            # CONVERSATION_ACTIVE transition reacts to.
             self._state.set_wake_word_status("inactive")
             self._accumulate_utterance(frame_bytes, frame_16k, is_speech, self._finish_conversation_utterance)
         else:

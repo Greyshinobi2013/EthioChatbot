@@ -28,6 +28,15 @@ session state, Reset language context, Reset playback state") spans
 multiple services' domains, so this module -- already the language-
 context/session owner -- performs that cleanup and publishes
 IDLE_ENTERED once the FSM reaches RETURN_TO_IDLE.
+
+Conversation Acknowledgement: on WAKE_WORD_DETECTED, this module also
+plays a single universal audio/common/yes.wav through the existing
+PlaybackService (no new player, no language selection here -- see
+_on_wake_word_acknowledged()). Its completion is what actually advances
+utils/fsm.py's (PLAYING_ACKNOWLEDGMENT, PLAYBACK_FINISHED) ->
+WAITING_FOR_FIRST_QUESTION transition; this module does not drive that
+transition directly, it only starts the playback that PlaybackService's
+own watcher thread will eventually publish PLAYBACK_FINISHED for.
 """
 from __future__ import annotations
 
@@ -39,7 +48,7 @@ from typing import Optional
 from utils.event_bus import Event, EventBus
 from utils.fsm import CONVERSATION_ACTIVE, RETURN_TO_IDLE
 from utils.logger import get_logger
-from utils.playback import PlaybackService
+from utils.playback import PlaybackError, PlaybackService
 from utils.state_manager import StateManager
 
 logger = get_logger(__name__)
@@ -48,6 +57,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 DEFAULT_TIMEOUT_SECONDS = 30  # matches config/settings.json's conversation_timeout
 DEFAULT_POLL_INTERVAL_SECONDS = 0.2
+
+# Single universal wake-word acknowledgment, per the Conversation
+# Acknowledgement spec: one language-agnostic file, not
+# english/amharic/arabic variants like greetings or please_wait.wav.
+ACKNOWLEDGMENT_AUDIO_PATH = PROJECT_ROOT / "audio" / "common" / "yes.wav"
 
 
 class ConversationManager:
@@ -92,6 +106,7 @@ class ConversationManager:
         self._watcher_thread: Optional[threading.Thread] = None
 
         self._bus.subscribe("WAKE_WORD_DETECTED", self._on_wake_word_detected)
+        self._bus.subscribe("WAKE_WORD_DETECTED", self._on_wake_word_acknowledged)
         self._bus.subscribe("SCENARIO_MATCHED", self._on_scenario_matched)
         self._bus.subscribe("FALLBACK_SCENARIO_SELECTED", self._on_fallback_selected)
         self._bus.subscribe("STATE_CHANGED", self._on_state_changed)
@@ -146,6 +161,34 @@ class ConversationManager:
 
         logger.info("Conversation started: language=%s", language)
         self._bus.publish("CONVERSATION_STARTED", {"language": language})
+
+    def _on_wake_word_acknowledged(self, event: Event) -> None:
+        """Play the universal wake-word acknowledgment (audio/common/yes.wav).
+
+        Deliberately separate from _on_wake_word_detected() above: that
+        method owns language selection and conversation-session
+        bookkeeping, this one owns exactly one thing (playing the
+        acknowledgment) and performs no language selection of its own,
+        per the Conversation Acknowledgement spec. play_audio() starts
+        playback and returns immediately (PlaybackService's own watcher
+        thread publishes PLAYBACK_FINISHED once yes.wav actually
+        finishes), so this stays fast, per EVENTS.md's "events should
+        complete quickly" rule -- no dedicated thread is needed here.
+        """
+        try:
+            self._playback.play_audio(ACKNOWLEDGMENT_AUDIO_PATH)
+        except PlaybackError:
+            # Without this, a missing/unreadable yes.wav would leave the
+            # FSM stuck in PLAYING_ACKNOWLEDGMENT forever -- nothing else
+            # would ever publish PLAYBACK_FINISHED for it. Publishing it
+            # here (instead of raising) lets WAITING_FOR_FIRST_QUESTION
+            # still be reached so a broken/missing acknowledgment asset
+            # doesn't take down wake-word activation entirely.
+            logger.exception(
+                "Could not play wake-word acknowledgment audio (%s); advancing anyway",
+                ACKNOWLEDGMENT_AUDIO_PATH,
+            )
+            self._bus.publish("PLAYBACK_FINISHED", {})
 
     def _preferred_language_fallback(self) -> Optional[str]:
         """Return the highest-priority active user's preferred_language, if any."""
