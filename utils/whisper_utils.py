@@ -59,6 +59,18 @@ SUPPORTED_LANGUAGES = tuple(WAKE_WORDS.keys())
 # this threshold was added to prevent).
 _MIN_UTTERANCE_RMS = 0.005
 
+# Minimum sample count below which audio is rejected outright, regardless
+# of amplitude. Whisper's log-mel spectrogram is computed via a 400-sample
+# (25ms at 16kHz) STFT window; audio shorter than that cannot produce even
+# one spectral frame, and was found (see _audio_rejection_reason) to be
+# the actual condition behind a separate crash --
+# "RuntimeError: cannot reshape tensor of 0 elements into shape [1, 0, 8, -1]"
+# -- distinct from and occurring after the near-silent-audio NaN-logits
+# crash _MIN_UTTERANCE_RMS guards against: this one is about buffer
+# *length*, not loudness, and can occur even on healthy-amplitude audio if
+# the accumulated utterance buffer itself ends up too short (or empty).
+_MIN_UTTERANCE_SAMPLES = 400
+
 
 def normalize_text(text: str) -> str:
     """Normalize transcribed text for wake-word/scenario matching.
@@ -196,24 +208,28 @@ class WhisperService:
 
     @staticmethod
     def _log_audio_stats(audio: np.ndarray) -> None:
-        """Log shape/dtype/min/max/mean/NaN-count/Inf-count for every buffer handed to Whisper.
+        """Log shape/len/dtype/min/max/rms/NaN-count/Inf-count for every buffer handed to Whisper.
 
-        Whisper's decoder has been observed to crash with
-        "ValueError: Expected parameter logits ... found invalid
-        values: tensor([[nan, nan, ...]])" on certain malformed input
-        (see _audio_rejection_reason); this makes the actual input
-        that triggered it visible in logs without needing to
-        reproduce the failure interactively.
+        Whisper has been observed to crash on certain malformed input,
+        both on loudness ("ValueError: Expected parameter logits ...
+        found invalid values: tensor([[nan, nan, ...]])", near-silent
+        audio) and on buffer length ("RuntimeError: cannot reshape
+        tensor of 0 elements into shape [1, 0, 8, -1]", too-short/empty
+        audio) -- see _audio_rejection_reason for both guards. This
+        makes the actual input that triggered either one visible in
+        logs without needing to reproduce the failure interactively.
         """
+        rms = float(np.sqrt(np.mean(np.square(audio, dtype=np.float64)))) if audio.size else 0.0
         nan_count = int(np.isnan(audio).sum()) if audio.size else 0
         inf_count = int(np.isinf(audio).sum()) if audio.size else 0
         logger.info(
-            "AUDIO_STATS: shape=%s dtype=%s min=%s max=%s mean=%s nan_count=%d inf_count=%d",
+            "AUDIO_STATS: shape=%s len=%d dtype=%s min=%s max=%s rms=%.6f nan_count=%d inf_count=%d",
             audio.shape,
+            len(audio),
             audio.dtype,
             f"{np.min(audio):.6f}" if audio.size else "n/a",
             f"{np.max(audio):.6f}" if audio.size else "n/a",
-            f"{np.mean(audio):.6f}" if audio.size else "n/a",
+            rms,
             nan_count,
             inf_count,
         )
@@ -222,20 +238,27 @@ class WhisperService:
     def _audio_rejection_reason(audio: np.ndarray) -> Optional[str]:
         """Return why `audio` is unsafe to hand to Whisper, or None if it is safe.
 
-        Whisper's internal log-mel spectrogram computation takes
-        log() of the STFT magnitude; for empty, all-(near-)zero, or
-        otherwise degenerate audio that magnitude can be zero or
-        exactly repeated, producing -inf/NaN internally that then
-        propagates through the encoder/decoder as NaN logits -- a
-        crash, not a graceful "no speech" result. All three of these
-        conditions (empty buffer, NaN/Inf already present from a
-        capture/resampling fault, or near-silent audio at/below the
-        noise floor) are exactly the kind of degenerate input that
-        triggers it, so they are rejected here before ever reaching
-        self._model.transcribe().
+        Two independent, unrelated failure modes are guarded against:
+        - Loudness: Whisper's log-mel spectrogram takes log() of the
+          STFT magnitude; for all-(near-)zero audio that magnitude can
+          be zero, producing -inf/NaN internally that propagates
+          through the encoder/decoder as NaN logits ("ValueError:
+          Expected parameter logits ... found invalid values").
+        - Length: audio shorter than one STFT window (400 samples/25ms
+          at 16kHz) -- including exactly empty -- cannot produce even
+          one spectral frame, which has been observed to crash with
+          "RuntimeError: cannot reshape tensor of 0 elements into
+          shape [1, 0, 8, -1]" downstream in the encoder. This can
+          happen even on healthy-amplitude audio if the accumulated
+          utterance buffer itself ends up too short.
+        NaN/Inf already present (e.g. from a capture/resampling fault)
+        is also rejected, since it would otherwise reach Whisper as-is.
+        All are rejected here before ever reaching self._model.transcribe().
         """
         if audio.size == 0:
             return "audio buffer is empty"
+        if audio.size < _MIN_UTTERANCE_SAMPLES:
+            return f"audio buffer too short ({audio.size} samples, below minimum {_MIN_UTTERANCE_SAMPLES})"
         if np.isnan(audio).any():
             return "audio contains NaN values"
         if np.isinf(audio).any():

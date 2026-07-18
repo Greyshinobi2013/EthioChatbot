@@ -461,7 +461,49 @@ class AudioService:
                 device was opened with (self._native_sample_rate).
         """
         native_rate = self._native_sample_rate or VAD_SAMPLE_RATE
+
+        # Guard against a short/partial device read: resample_int16()'s
+        # output length is only correct (exactly one VAD frame's worth of
+        # 16kHz samples) when given exactly self._capture_blocksize
+        # native-rate samples -- by construction, blocksize is always
+        # computed so that resampling it yields a clean, exact frame
+        # length with no rounding surprises. A mismatch here (which
+        # sd.InputStream.read() is not supposed to produce, but this
+        # project's own PipeWire/ALSA setup has shown real instability
+        # elsewhere -- see _open_stream()'s recovery logic) can otherwise
+        # silently produce a too-short or zero-length resampled frame:
+        # WebRTC VAD requires an exact frame size and would raise on a
+        # malformed one, and a 0-length frame accumulated into an
+        # utterance buffer is exactly the condition behind
+        # "RuntimeError: cannot reshape tensor of 0 elements into shape
+        # [1, 0, 8, -1]" once handed to Whisper. Skipping the frame here
+        # (never resampled, never forwarded to VAD/accumulation) closes
+        # that off at the source rather than downstream.
+        if self._capture_blocksize is not None and len(raw_native_rate_int16) != self._capture_blocksize:
+            logger.warning(
+                "AUDIO_CHUNK_DIAGNOSTIC: dropping malformed capture chunk (got %d samples, expected %d, "
+                "native_rate=%dHz) -- likely a short/partial device read; not forwarded to VAD or "
+                "utterance accumulation",
+                len(raw_native_rate_int16),
+                self._capture_blocksize,
+                native_rate,
+            )
+            return
+
         frame_16k = resample_int16(raw_native_rate_int16, native_rate, VAD_SAMPLE_RATE)
+
+        if frame_16k.size == 0:
+            # Should be unreachable given the length guard above (see its
+            # docstring), but checked explicitly since this is exactly
+            # the condition that must never reach VAD/Whisper.
+            logger.warning(
+                "AUDIO_CHUNK_DIAGNOSTIC: resample_int16() produced an empty frame from a %d-sample raw "
+                "chunk (native_rate=%dHz); skipping",
+                len(raw_native_rate_int16),
+                native_rate,
+            )
+            return
+
         frame_bytes = frame_16k.astype(np.int16).tobytes()
 
         with self._chunk_lock:
@@ -544,6 +586,27 @@ class AudioService:
             self._reset_utterance()
 
             audio_int16 = np.concatenate(chunks)
+
+            # Hard guard: reject an empty accumulated utterance gracefully
+            # rather than handing it to Whisper (which has been observed
+            # to crash with "RuntimeError: cannot reshape tensor of 0
+            # elements into shape [1, 0, 8, -1]" on it). Given the
+            # malformed-chunk guard in process_chunk() above (no
+            # zero-length frame_16k can enter self._utterance_chunks),
+            # this should be unreachable in practice; it stays as a
+            # second, source-level line of defense alongside
+            # WhisperService._audio_rejection_reason()'s own empty-buffer
+            # check, and its log records exactly how many frames were
+            # accumulated, to help identify whether emptiness came from
+            # zero-length frames or a genuinely empty frame list.
+            if audio_int16.size == 0:
+                logger.warning(
+                    "Rejecting empty accumulated utterance before Whisper (accumulated %d frame(s), "
+                    "concatenated length=0); not calling Whisper",
+                    len(chunks),
+                )
+                return
+
             rms_before_normalization = _int16_rms(audio_int16)
             audio_float32 = (audio_int16.astype(np.float32) / 32768.0).clip(-1.0, 1.0)
             rms_after_normalization = float(np.sqrt(np.mean(np.square(audio_float32, dtype=np.float64))))
