@@ -6,11 +6,17 @@ detection, speech transcription, language recognition. The base model
 supports English, Amharic, and Arabic while remaining efficient
 enough for Raspberry Pi 4.
 
-Per README.md's Wake Word System, there is no separate language
-selection stage: whichever language's wake-word list a transcribed
-utterance matches directly becomes current_language for the session
-(WAKE_WORD_DETECTED's language payload), consistent with the Language
-Selection Rule's first priority tier (Wake Word Language).
+Phase 1 (wake-word simplification): a single universal wake word,
+"Ethiopia", replaces the previous per-language wake-word catalog.
+Matching it is activation-only and no longer determines
+current_language -- README.md's Language Selection Rule's first
+priority tier (Wake Word Language) is now always empty, so
+ConversationManager's existing preferred-language/English fallback
+tiers apply unconditionally instead. This file only changes wake-word
+*matching*; ConversationManager, the FSM, and the scenario/greeting
+language systems (still english/amharic/arabic, per
+utils/scenario_engine.py and utils/face_enrollment.py's own
+SUPPORTED_LANGUAGES) are unaffected.
 """
 from __future__ import annotations
 
@@ -54,13 +60,11 @@ _WHISPER_LANGUAGE_TO_NAME: Dict[str, str] = {
 }
 _NAME_TO_WHISPER_LANGUAGE: Dict[str, str] = {name: code for code, name in _WHISPER_LANGUAGE_TO_NAME.items()}
 
-WAKE_WORDS: Dict[str, Tuple[str, ...]] = {
-    "english": ("hello robot", "hey robot", "computer"),
-    "amharic": ("ሰላም ሮቦት", "ሄይ ሮቦት"),
-    "arabic": ("مرحبا روبوت", "أهلا روبوت"),
-}
-
-SUPPORTED_LANGUAGES = tuple(WAKE_WORDS.keys())
+# Phase 1: the sole wake word, replacing the previous per-language
+# catalog (WAKE_WORDS dict of english/amharic/arabic phrase lists).
+# Activation only -- see detect_wake_word()/process_audio() below for
+# why this no longer determines current_language.
+UNIVERSAL_WAKE_WORD = "ethiopia"
 
 # Minimum RMS (of normalized [-1, 1] float32 audio) below which an
 # utterance is treated as silence/noise-floor rather than real speech and
@@ -101,13 +105,18 @@ def normalize_text(text: str) -> str:
 class WakeWordMatch:
     """A successfully detected wake word.
 
+    Phase 1: activation-only -- carries no language field. Matching
+    the universal wake word does not determine current_language (see
+    process_audio()); the language field this dataclass previously
+    had was removed rather than kept and ignored, so nothing can
+    accidentally start relying on a value that no longer means anything.
+
     Attributes:
-        language: One of SUPPORTED_LANGUAGES; becomes current_language.
-        matched_phrase: The specific wake-word phrase that matched.
+        matched_phrase: The wake-word phrase that matched (currently
+            always UNIVERSAL_WAKE_WORD).
         transcribed_text: The normalized Whisper transcription.
     """
 
-    language: str
     matched_phrase: str
     transcribed_text: str
 
@@ -401,82 +410,58 @@ class WhisperService:
         return None
 
     def detect_wake_word(self, audio: np.ndarray) -> Optional[WakeWordMatch]:
-        """Transcribe audio and check it against the wake-word catalog.
+        """Transcribe audio and check it against the universal wake word.
 
-        Uses a single Whisper call with language auto-detection rather
-        than re-transcribing once per supported language, to keep
-        this affordable on Raspberry Pi 4. The transcription is then
-        checked against all three languages' wake-word lists (cheap
-        string comparisons), so an occasional language
-        auto-misdetection by Whisper does not prevent a match.
+        Phase 1: a single universal wake word (UNIVERSAL_WAKE_WORD,
+        "ethiopia") replaces the previous per-language wake-word
+        catalog. Language auto-detection is still used for the
+        transcription itself (unchanged), but the result is only
+        checked against this one phrase -- it is activation-only and
+        does not determine current_language (see process_audio()).
 
         Every call logs a full WAKE_WORD_EVALUATION record at INFO
         level (raw transcription, normalized transcription, Whisper's
-        detected language, the complete wake-word catalog checked,
-        the per-phrase match/no-match result, and the final outcome)
-        so that live regressions -- e.g. Whisper mis-transcribing a
-        spoken wake word close enough to be human-recognizable but not
-        an exact/substring match against WAKE_WORDS -- are diagnosable
-        from logs alone, without reproducing the failure interactively.
+        detected language, the wake word checked, and the match
+        outcome) so that live regressions -- e.g. Whisper
+        mis-transcribing a spoken wake word close enough to be
+        human-recognizable but not an exact/substring match -- are
+        diagnosable from logs alone, without reproducing the failure
+        interactively.
 
         Args:
             audio: Mono float32 PCM samples at 16kHz.
 
         Returns:
-            A WakeWordMatch if a wake word was recognized, else None.
+            A WakeWordMatch if the universal wake word was recognized,
+            else None.
         """
         whisper_language_code, raw_text = self.transcribe(audio, language=None)
         normalized = normalize_text(raw_text)
         detected_language = _WHISPER_LANGUAGE_TO_NAME.get(whisper_language_code, whisper_language_code or "unknown")
 
-        match: Optional[WakeWordMatch] = None
-        per_phrase_results: list[Tuple[str, str, bool]] = []
-
-        if normalized:
-            for candidate_language, phrases in WAKE_WORDS.items():
-                for phrase in phrases:
-                    normalized_phrase = normalize_text(phrase)
-                    is_match = normalized_phrase == normalized or normalized_phrase in normalized
-                    per_phrase_results.append((candidate_language, phrase, is_match))
-                    if is_match and match is None:
-                        match = WakeWordMatch(
-                            language=candidate_language,
-                            matched_phrase=phrase,
-                            transcribed_text=normalized,
-                        )
+        normalized_wake_word = normalize_text(UNIVERSAL_WAKE_WORD)
+        is_match = bool(normalized) and (normalized_wake_word == normalized or normalized_wake_word in normalized)
+        match = WakeWordMatch(matched_phrase=UNIVERSAL_WAKE_WORD, transcribed_text=normalized) if is_match else None
 
         if not normalized:
             reason = "transcription is empty after normalization"
         elif match is not None:
-            reason = f"matched '{match.matched_phrase}' (language={match.language})"
+            reason = f"matched universal wake word '{UNIVERSAL_WAKE_WORD}'"
         else:
-            reason = "no configured wake word matched the normalized transcription"
-
-        expected_wake_words_block = "\n".join(
-            f"    {language}: {list(phrases)}" for language, phrases in WAKE_WORDS.items()
-        )
-        per_phrase_block = (
-            "\n".join(
-                f"    {language}: '{phrase}' -> {'MATCH' if is_match else 'no match'}"
-                for language, phrase, is_match in per_phrase_results
-            )
-            or "    (skipped: empty transcription)"
-        )
+            reason = "universal wake word did not match the normalized transcription"
 
         logger.info(
             "WAKE_WORD_EVALUATION\n"
             "  RAW_TRANSCRIPTION: %r\n"
             "  NORMALIZED_TEXT: %r\n"
             "  DETECTED_LANGUAGE: %s\n"
-            "  EXPECTED_WAKE_WORDS:\n%s\n"
-            "  PER_PHRASE_RESULTS:\n%s\n"
+            "  EXPECTED_WAKE_WORD: %r\n"
             "  MATCH_RESULT: %s\n"
             "  REASON: %s",
             raw_text,
             normalized,
             detected_language,
-            expected_wake_words_block,
-            per_phrase_block,
+            UNIVERSAL_WAKE_WORD,
             "true" if match is not None else "false",
             reason,
         )
@@ -486,10 +471,18 @@ class WhisperService:
     def process_audio(self, audio: np.ndarray) -> Optional[WakeWordMatch]:
         """Run wake-word detection on an audio buffer and drive the FSM.
 
-        On a match: sets state_manager.current_language and publishes
-        WAKE_WORD_DETECTED (which the Milestone 2 FSM's own
-        subscription advances WAITING_FOR_WAKE_WORD -> CONVERSATION_ACTIVE
-        with). On no match: publishes WAKE_WORD_REJECTED.
+        On a match: publishes WAKE_WORD_DETECTED with an empty payload
+        (which the Milestone 2 FSM's own subscription advances
+        WAITING_FOR_WAKE_WORD -> CONVERSATION_ACTIVE with). Phase 1's
+        universal wake word carries no language information, so this
+        no longer calls state_manager.set_current_language() itself --
+        ConversationManager's existing _on_wake_word_detected()
+        subscriber already falls back to the highest-priority active
+        user's preferred_language, then "english", whenever the event
+        payload has no "language" key (dict.get() returns None,
+        exactly as if this had explicitly published one), so that
+        fallback now runs unconditionally with no changes needed there.
+        On no match: publishes WAKE_WORD_REJECTED, unchanged.
 
         Requires this WhisperService to have been constructed with an
         event_bus and state_manager.
@@ -511,8 +504,7 @@ class WhisperService:
 
         match = self.detect_wake_word(audio)
         if match is not None:
-            self._state.set_current_language(match.language)
-            self._bus.publish("WAKE_WORD_DETECTED", {"language": match.language})
+            self._bus.publish("WAKE_WORD_DETECTED", {})
         else:
             self._bus.publish("WAKE_WORD_REJECTED", {})
         return match
