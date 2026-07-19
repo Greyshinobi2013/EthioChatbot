@@ -11,5 +11,31 @@
     "front_embedding_path": "faces/embeddings/Mr. Natnael_front.npy",
     "left_embedding_path": "faces/embeddings/Mr. Natnael_left.npy",
     "right_embedding_path": "faces/embeddings/Mr. Natnael_right.npy"
+  },
+  {
+    "user_id": "muhamed",
+    "priority": 3,
+    "preferred_language": "english",
+    "greeting_audio": "audio/english/greetings/muhamed.wav",
+    "dialog_audio": "audio/english/dialogs/muhamed.wav",
+    "front_image_path": "faces/images/muhamed_front.jpg",
+    "left_image_path": "faces/images/muhamed_left.jpg",
+    "right_image_path": "faces/images/muhamed_right.jpg",
+    "front_embedding_path": "faces/embeddings/muhamed_front.npy",
+    "left_embedding_path": "faces/embeddings/muhamed_left.npy",
+    "right_embedding_path": "faces/embeddings/muhamed_right.npy"
+  },
+  {
+    "user_id": "bruk",
+    "priority": 2,
+    "preferred_language": "english",
+    "greeting_audio": "audio/english/greetings/bruk.wav",
+    "dialog_audio": "audio/english/dialogs/bruk.wav",
+    "front_image_path": "faces/images/bruk_front.jpg",
+    "left_image_path": "faces/images/bruk_left.jpg",
+    "right_image_path": "faces/images/bruk_right.jpg",
+    "front_embedding_path": "faces/embeddings/bruk_front.npy",
+    "left_embedding_path": "faces/embeddings/bruk_left.npy",
+    "right_embedding_path": "faces/embeddings/bruk_right.npy"
   }
 ]
