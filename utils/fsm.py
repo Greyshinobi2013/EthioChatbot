@@ -76,11 +76,19 @@ _TRANSITIONS: Dict[Tuple[str, str], str] = {
     # Operator-triggered replay (Dashboard's "Restart Greetings" button),
     # not part of STATE_MACHINE_V3.md's original event catalog. Reuses
     # the existing PRIORITY_SORTING entry point rather than inventing a
-    # new state: greeting_manager.py detects this specific trigger event
-    # and clears greeted flags for currently-active users first, so the
-    # normal PRIORITY_SORTING -> GREETING_QUEUE -> PLAY_GREETINGS ->
+    # new state: greeting_manager.py detects this specific trigger event,
+    # stops whatever greeting/dialog audio is currently playing or
+    # paused, and clears greeted flags for currently-active users, so
+    # the normal PRIORITY_SORTING -> GREETING_QUEUE -> PLAY_GREETINGS ->
     # dialog -> MONITORING pipeline replays for everyone still visible.
+    # Valid from every state where a greeting/dialog session can be
+    # mid-flight (playing or paused), not just MONITORING, so an
+    # operator can restart without waiting for the session to finish.
     (MONITORING, "RESTART_GREETINGS"): PRIORITY_SORTING,
+    (PLAY_GREETINGS, "RESTART_GREETINGS"): PRIORITY_SORTING,
+    (PLAY_COMMON_DIALOG, "RESTART_GREETINGS"): PRIORITY_SORTING,
+    (PLAY_USER_DIALOGS, "RESTART_GREETINGS"): PRIORITY_SORTING,
+    (PAUSED_DIALOG, "RESTART_GREETINGS"): PRIORITY_SORTING,
 }
 
 # Extra (from_state -> possible next states) entries for the two
@@ -160,6 +168,11 @@ class FiniteStateMachine:
         if event.name == "INTERRUPT_DIALOG":
             # Remember where to return to on RESUME_DIALOG.
             self._paused_from = self.current_state
+        elif event.name == "RESTART_GREETINGS":
+            # A restart discards whatever pause was in effect -- RESUME_DIALOG
+            # must not resurrect a dialog that's about to be replayed from
+            # scratch.
+            self._paused_from = None
 
         self.request_transition(target_state, event.name)
 

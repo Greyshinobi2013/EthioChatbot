@@ -102,13 +102,25 @@ with right:
         # Replays greetings + dialogs for everyone currently visible,
         # without touching recognition, presence, enrollment, priority,
         # or language data -- see fsm.py's RESTART_GREETINGS transition
-        # and greeting_manager.py's handling of it. Only meaningful from
-        # MONITORING with at least one active user; otherwise the FSM
-        # has nothing queued to restart.
+        # and greeting_manager.py's handling of it. Enabled whenever
+        # there's anything to restart: users currently present, a
+        # dialog sitting paused, or a greeting/dialog session still
+        # mid-flight -- not just once back in MONITORING, since an
+        # operator may want to restart before the current session ends.
+        session_in_progress_states = {
+            "PRIORITY_SORTING",
+            "GREETING_QUEUE",
+            "PLAY_GREETINGS",
+            "PLAY_COMMON_DIALOG",
+            "PLAY_USER_DIALOGS",
+            "PAUSED_DIALOG",
+        }
+        playback_is_paused = snapshot["playback_status"].get("state") == "paused"
+        restart_enabled = bool(active_users) or playback_is_paused or snapshot["current_state"] in session_in_progress_states
         if st.button(
             "Restart Greetings",
             icon=":material/replay:",
-            disabled=not (active_users and snapshot["current_state"] == "MONITORING"),
+            disabled=not restart_enabled,
         ):
             application.event_bus.publish("RESTART_GREETINGS", {})
             st.rerun()

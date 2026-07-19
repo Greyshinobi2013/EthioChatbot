@@ -100,12 +100,22 @@ class GreetingManager:
 
         if to_state == PRIORITY_SORTING:
             if trigger_event == "RESTART_GREETINGS":
-                # Operator-triggered replay: force every currently
-                # active user back through the pipeline by clearing
-                # their greeted flag before (re)sorting, rather than
-                # touching face presence/recognition state at all.
+                # Operator-triggered replay, possibly fired mid-greeting
+                # or mid-dialog (playing or paused): stop whatever audio
+                # is currently loaded first -- a manual stop_audio(),
+                # not a natural finish, so it does not publish
+                # PLAYBACK_FINISHED and cannot race with
+                # _on_playback_finished below. _phase is cleared too, so
+                # a PLAYBACK_FINISHED that was already in flight before
+                # the stop lands is a no-op instead of double-advancing.
+                self._playback.stop_audio()
+                self._phase = None
+                # Force every currently active user back through the
+                # pipeline by clearing their greeted flag before
+                # (re)sorting, rather than touching face
+                # presence/recognition state at all.
                 self._state.clear_all_greeted()
-                logger.info("RESTART_GREETINGS: greeted flags cleared for all active users")
+                logger.info("RESTART_GREETINGS: playback stopped, greeted flags cleared for all active users")
             self._handle_priority_sorting()
         elif to_state == GREETING_QUEUE:
             self._handle_greeting_queue()
