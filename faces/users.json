@@ -1,1 +1,15 @@
-[]
+[
+  {
+    "user_id": "Mr. Natnael",
+    "priority": 1,
+    "preferred_language": "english",
+    "greeting_audio": "audio/english/greetings/Mr. Natnael.wav",
+    "dialog_audio": "audio/english/dialogs/Mr. Natnael.wav",
+    "front_image_path": "faces/images/Mr. Natnael_front.jpg",
+    "left_image_path": "faces/images/Mr. Natnael_left.jpg",
+    "right_image_path": "faces/images/Mr. Natnael_right.jpg",
+    "front_embedding_path": "faces/embeddings/Mr. Natnael_front.npy",
+    "left_embedding_path": "faces/embeddings/Mr. Natnael_left.npy",
+    "right_embedding_path": "faces/embeddings/Mr. Natnael_right.npy"
+  }
+]
