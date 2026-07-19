@@ -1,22 +1,32 @@
-"""Settings page for EthioChatbot V2's Streamlit dashboard.
+"""Settings page for EthioChatbot V3's Streamlit dashboard.
 
 Presentation-layer only: collects setting values and delegates
 loading/saving to app.py's AppConfig/load_configuration()/
-save_configuration(), per ARCHITECTURE.md's rule that Streamlit pages
-must not contain business logic. Does not touch the live running
-Application: changes take effect the next time the application starts,
-since the running engine's services were already constructed from
-whatever configuration was in effect at that time.
+save_configuration() and load_interaction_mode()/save_interaction_mode(),
+per DEVELOPMENT_RULES_V3.md's rule that Streamlit pages must not
+contain business logic. Camera/recognition changes take effect the
+next time the application starts; the interaction mode also updates
+the live running system immediately (mirroring the Dashboard page's
+mode switch), since STATE_MACHINE_V3.md's Mode A/B branch is read live
+from shared state, not from a value baked in at startup.
 """
 from __future__ import annotations
 
 import streamlit as st
 
-from app import AppConfig, ConfigurationError, load_configuration, save_configuration
+from app import (
+    INTERACTION_MODES,
+    AppConfig,
+    ConfigurationError,
+    get_running_application,
+    load_configuration,
+    load_interaction_mode,
+    save_configuration,
+    save_interaction_mode,
+)
 
-st.set_page_config(page_title="Settings - EthioChatbot V2", page_icon="⚙️")
+st.set_page_config(page_title="Settings - EthioChatbot V3", page_icon=":material/settings:")
 st.title("Settings")
-st.caption("Changes are saved to config/settings.json and take effect the next time the application starts.")
 
 try:
     config = load_configuration()
@@ -24,70 +34,73 @@ except ConfigurationError as exc:
     st.error(f"Could not load configuration: {exc}")
     st.stop()
 
-WHISPER_MODEL_SIZES = ["tiny", "base", "small", "medium", "large"]
+st.subheader("Interaction mode")
+mode_labels = {"common_dialog": "Mode A - common dialog", "user_specific_dialog": "Mode B - user-specific dialog"}
+current_mode = load_interaction_mode()
+selected_label = st.segmented_control(
+    "Interaction mode",
+    options=list(mode_labels.values()),
+    default=mode_labels[current_mode],
+    label_visibility="collapsed",
+)
+selected_mode = next((key for key, label in mode_labels.items() if label == selected_label), current_mode)
+if selected_mode != current_mode:
+    try:
+        save_interaction_mode(selected_mode)
+        application = get_running_application()
+        application.state.set_interaction_mode(selected_mode)
+        st.success(f"Interaction mode set to {mode_labels[selected_mode]}.")
+    except ConfigurationError as exc:
+        st.error(str(exc))
 
-st.subheader("Camera Settings")
+st.caption(f"Persisted to config/interaction_modes.json. Allowed values: {', '.join(INTERACTION_MODES)}.")
+
+st.divider()
+st.subheader("Camera")
 camera_index = st.number_input("Camera index", min_value=0, value=config.camera_index, step=1)
 camera_width = st.number_input("Camera width", min_value=1, value=config.camera_width, step=1)
 camera_height = st.number_input("Camera height", min_value=1, value=config.camera_height, step=1)
+
+st.subheader("Recognition")
 recognition_interval = st.number_input(
-    "Recognition interval (recognize every Nth frame)",
+    "Recognition interval (re-recognize an already-tracked face every Nth frame)",
     min_value=1,
     value=config.recognition_interval,
     step=1,
+    help="Newly appeared faces are always recognized immediately regardless of this interval.",
 )
 face_confidence = st.slider(
-    "Face confidence threshold (max embedding distance)",
+    "Minimum recognition similarity",
     min_value=0.0,
     max_value=1.0,
     value=config.face_confidence,
-)
-face_lost_timeout = st.number_input(
-    "Face lost timeout (seconds)", min_value=1, value=config.face_lost_timeout, step=1
-)
-
-st.subheader("Whisper Settings")
-whisper_model_index = (
-    WHISPER_MODEL_SIZES.index(config.whisper_model) if config.whisper_model in WHISPER_MODEL_SIZES else 1
-)
-whisper_model = st.selectbox("Whisper model", WHISPER_MODEL_SIZES, index=whisper_model_index)
-
-st.subheader("VAD Settings")
-vad_aggressiveness = st.slider("VAD aggressiveness", min_value=0, max_value=3, value=config.vad_aggressiveness)
-
-st.subheader("Audio Input Settings")
-audio_input_device = st.number_input(
-    "Microphone device index (-1 = auto-detect)",
-    min_value=-1,
-    value=config.audio_input_device if config.audio_input_device is not None else -1,
-    step=1,
     help=(
-        "sounddevice input device index to prefer, e.g. 3. If unset (-1) "
-        "or the device fails validation at startup, utils/audio_service.py "
-        "automatically falls back to probing known-working device indices."
+        "Minimum ArcFace cosine similarity required to accept a match "
+        "(higher = stricter). Typical usable range is 0.3-0.5."
     ),
 )
 
-st.subheader("Timeout Settings")
-conversation_timeout = st.number_input(
-    "Conversation timeout (seconds)", min_value=1, value=config.conversation_timeout, step=1
+st.subheader("Face presence")
+face_lost_timeout = st.number_input(
+    "Face lost timeout (seconds)",
+    min_value=1,
+    value=config.face_lost_timeout,
+    step=1,
+    help="Seconds a recognized user may go unseen before FACE_LOST fires for them.",
 )
 
-if st.button("Save Settings", type="primary"):
+st.divider()
+if st.button("Save settings", type="primary", icon=":material/save:"):
     updated_config = AppConfig(
         camera_index=int(camera_index),
         camera_width=int(camera_width),
         camera_height=int(camera_height),
-        whisper_model=whisper_model,
         recognition_interval=int(recognition_interval),
         face_confidence=float(face_confidence),
         face_lost_timeout=int(face_lost_timeout),
-        vad_aggressiveness=int(vad_aggressiveness),
-        conversation_timeout=int(conversation_timeout),
-        audio_input_device=int(audio_input_device) if int(audio_input_device) >= 0 else None,
     )
     try:
         save_configuration(updated_config)
-        st.success("Settings saved to config/settings.json. Restart the application for changes to take effect.")
+        st.success("Settings saved to config/settings.json. Restart the application for camera/recognition changes to take effect.")
     except ConfigurationError as exc:
         st.error(str(exc))

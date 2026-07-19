@@ -3,20 +3,9 @@
   "camera_width": 640,
   "camera_height": 480,
 
-  "whisper_model": "base",
-
   "recognition_interval": 10,
 
-  "face_confidence": 0.6,
+  "face_confidence": 0.38,
 
-  "face_lost_timeout": 5,
-
-  "vad_aggressiveness": 2,
-
-  "conversation_timeout": 30,
-
-  "audio_input_device": 3,
-
-  "noise_suppression_enabled": true,
-  "noise_suppression_engine": "rnnoise"
+  "face_lost_timeout": 5
 }

@@ -9,3 +9,5 @@ logs/*.log
 debug_audio/
 
 models/*.dat
+models/*.onnx
+models/*.tflite

@@ -1,21 +1,18 @@
-"""EthioChatbot V2 application entry point.
+"""EthioChatbot V3 application entry point.
 
-Milestone 1 established configuration loading, centralized logging,
-shared application state, and a service registration framework.
-Milestone 2 adds the Event Bus and Finite State Machine backbone.
-Milestones 3-10 built the individual services (face enrollment,
-camera/recognition, greeting, Whisper, scenario matching, playback,
-VAD/interruption, conversation orchestration). Milestone 11 adds the
-Streamlit administration/monitoring pages, which need one running
-instance of the full system shared across every page and every
-Streamlit rerun -- start_full_system()/get_running_application()
-below provide that, without changing the plain `python app.py` CLI
-path's foundation-only behavior (main() still only calls startup()).
-
-Per ARCHITECTURE.md's Startup Sequence, this module loads
+Per SYSTEM_ARCHITECTURE_V3.md's Startup Sequence, this module loads
 configuration, initializes logging, initializes the event bus,
-initializes shared state, initializes the FSM, initializes the
-service registry, starts any registered services, and enters IDLE.
+initializes shared state, initializes the FSM, then builds and starts
+the full face-recognition/greeting/playback pipeline: FaceRecognizer,
+FacePresenceManager, CameraService, PlaybackService, and
+GreetingManager.
+
+Mirrors this project's established pattern of a foundation-only CLI
+path (main() calls startup() only) plus a cached, fully-started
+singleton for the Streamlit dashboard (get_running_application()),
+since Streamlit reruns this whole script on every page interaction but
+the camera thread and other background services must not restart each
+time.
 """
 from __future__ import annotations
 
@@ -31,35 +28,31 @@ from typing import List, Optional, Protocol, runtime_checkable
 
 import streamlit as st
 
-from utils.audio_service import AudioService
 from utils.camera_service import CameraService
-from utils.conversation_manager import ConversationManager
 from utils.event_bus import EventBus
+from utils.face_presence_manager import FacePresenceManager
 from utils.face_recognition import FaceRecognizer
-from utils.fsm import FiniteStateMachine
-from utils.greeting_service import GreetingService
+from utils.fsm import FACE_DETECTION_MODE, FiniteStateMachine
+from utils.greeting_manager import GreetingManager
 from utils.logger import configure_logging, get_logger
-from utils.noise_suppression import NoiseSuppressor
 from utils.playback import PlaybackService
-from utils.scenario_engine import ScenarioEngine
 from utils.state_manager import StateManager
-from utils.vad_handler import VADHandler
-from utils.whisper_utils import WhisperService
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "settings.json"
+DEFAULT_SETTINGS_PATH = PROJECT_ROOT / "config" / "settings.json"
+DEFAULT_INTERACTION_MODE_PATH = PROJECT_ROOT / "config" / "interaction_modes.json"
 
 REQUIRED_CONFIG_KEYS = (
     "camera_index",
     "camera_width",
     "camera_height",
-    "whisper_model",
     "recognition_interval",
     "face_confidence",
     "face_lost_timeout",
-    "vad_aggressiveness",
-    "conversation_timeout",
 )
+
+INTERACTION_MODES = ("common_dialog", "user_specific_dialog")
+DEFAULT_INTERACTION_MODE = "common_dialog"
 
 
 class ConfigurationError(Exception):
@@ -74,56 +67,29 @@ class AppConfig:
         camera_index: OpenCV device index for the webcam.
         camera_width: Capture frame width in pixels.
         camera_height: Capture frame height in pixels.
-        whisper_model: Whisper model size to load (e.g. "base").
-        recognition_interval: Run face recognition every Nth frame.
-        face_confidence: Minimum confidence to accept a face match.
+        recognition_interval: Run full ArcFace recognition on
+            already-tracked faces every Nth frame; new tracks are
+            always recognized immediately.
+        face_confidence: Minimum ArcFace cosine similarity accepted as
+            a match (higher = stricter). Note: this key held the
+            opposite semantics (a max dlib L2 distance) before V3.
         face_lost_timeout: Seconds of absence before FACE_LOST fires.
-        vad_aggressiveness: WebRTC VAD aggressiveness level (0-3).
-        conversation_timeout: Seconds of inactivity before TIMEOUT fires.
-        audio_input_device: Preferred sounddevice input device index
-            for the microphone (e.g. 3), or None to skip straight to
-            utils/audio_service.py's fallback device probing. Optional
-            (defaults to None) so existing configuration files without
-            this key still load; PortAudio's own "system default"
-            device (device=None passed straight to sd.InputStream) is
-            not relied on regardless, since it was found to raise
-            PortAudioError [PaErrorCode -9999] on this project's own
-            ALSA/PipeWire setup.
-        noise_suppression_enabled: Whether utils/noise_suppression.py's
-            RNNoise stage runs between microphone capture and VAD/
-            Whisper. Optional (defaults to True); False makes
-            AudioService behave exactly as it did before noise
-            suppression existed.
-        noise_suppression_engine: Which engine to use. Only "rnnoise"
-            is implemented; any other value disables suppression
-            (logged, not an error) rather than failing startup.
     """
 
     camera_index: int
     camera_width: int
     camera_height: int
-    whisper_model: str
     recognition_interval: int
     face_confidence: float
     face_lost_timeout: int
-    vad_aggressiveness: int
-    conversation_timeout: int
-    audio_input_device: Optional[int] = None
-    noise_suppression_enabled: bool = True
-    noise_suppression_engine: str = "rnnoise"
 
     @classmethod
     def from_dict(cls, data: dict) -> "AppConfig":
         """Build an AppConfig from a validated settings dictionary."""
-        return cls(
-            **{key: data[key] for key in REQUIRED_CONFIG_KEYS},
-            audio_input_device=data.get("audio_input_device"),
-            noise_suppression_enabled=data.get("noise_suppression_enabled", True),
-            noise_suppression_engine=data.get("noise_suppression_engine", "rnnoise"),
-        )
+        return cls(**{key: data[key] for key in REQUIRED_CONFIG_KEYS})
 
 
-def load_configuration(config_path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
+def load_configuration(config_path: Path = DEFAULT_SETTINGS_PATH) -> AppConfig:
     """Load and validate config/settings.json.
 
     Args:
@@ -157,12 +123,11 @@ def load_configuration(config_path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         raise ConfigurationError(f"Configuration values are invalid: {exc}") from exc
 
 
-def save_configuration(config: AppConfig, config_path: Path = DEFAULT_CONFIG_PATH) -> None:
+def save_configuration(config: AppConfig, config_path: Path = DEFAULT_SETTINGS_PATH) -> None:
     """Persist an AppConfig back to config/settings.json.
 
-    Used by pages/4_Settings.py. Changes take effect the next time the
-    application starts -- the running engine's services were already
-    constructed from whatever configuration was in effect at startup.
+    Used by pages/3_Settings.py. Changes take effect the next time the
+    application starts.
 
     Args:
         config: The configuration to save.
@@ -178,15 +143,54 @@ def save_configuration(config: AppConfig, config_path: Path = DEFAULT_CONFIG_PAT
         raise ConfigurationError(f"Could not write configuration file: {config_path}") from exc
 
 
+def load_interaction_mode(config_path: Path = DEFAULT_INTERACTION_MODE_PATH) -> str:
+    """Load the configured interaction mode from config/interaction_modes.json.
+
+    Falls back to DEFAULT_INTERACTION_MODE if the file is missing,
+    empty, malformed, or names an unrecognized mode -- per
+    DEVELOPMENT_RULES_V3.md's rule that configuration problems must
+    never crash the system.
+
+    Args:
+        config_path: Path to the JSON interaction-mode file.
+
+    Returns:
+        "common_dialog" or "user_specific_dialog".
+    """
+    if not config_path.exists():
+        return DEFAULT_INTERACTION_MODE
+    try:
+        with config_path.open("r", encoding="utf-8") as config_file:
+            raw_config = json.load(config_file)
+    except (json.JSONDecodeError, OSError):
+        return DEFAULT_INTERACTION_MODE
+
+    mode = raw_config.get("interaction_mode", DEFAULT_INTERACTION_MODE)
+    return mode if mode in INTERACTION_MODES else DEFAULT_INTERACTION_MODE
+
+
+def save_interaction_mode(mode: str, config_path: Path = DEFAULT_INTERACTION_MODE_PATH) -> None:
+    """Persist the interaction mode to config/interaction_modes.json.
+
+    Args:
+        mode: One of INTERACTION_MODES.
+        config_path: Path to write to.
+
+    Raises:
+        ConfigurationError: if mode is unrecognized or the file cannot be written.
+    """
+    if mode not in INTERACTION_MODES:
+        raise ConfigurationError(f"Unknown interaction mode: {mode}. Must be one of {INTERACTION_MODES}.")
+    try:
+        with config_path.open("w", encoding="utf-8") as config_file:
+            json.dump({"interaction_mode": mode}, config_file, indent=2)
+    except OSError as exc:
+        raise ConfigurationError(f"Could not write interaction mode file: {config_path}") from exc
+
+
 @runtime_checkable
 class Service(Protocol):
-    """Interface every long-running robot service must implement.
-
-    Later milestones (camera, audio, Whisper, VAD, playback,
-    conversation) provide concrete implementations and register them
-    with the ServiceRegistry so the application lifecycle can start
-    and stop them uniformly.
-    """
+    """Interface every long-running service must implement."""
 
     name: str
 
@@ -254,7 +258,7 @@ class ServiceRegistry:
 class Application:
     """Coordinates configuration, logging, shared state, and service lifecycle."""
 
-    def __init__(self, config_path: Path = DEFAULT_CONFIG_PATH) -> None:
+    def __init__(self, config_path: Path = DEFAULT_SETTINGS_PATH) -> None:
         """Args:
             config_path: Path to config/settings.json.
         """
@@ -269,24 +273,18 @@ class Application:
         # Populated by start_full_system() only (not by startup()/main()'s
         # CLI path), for Streamlit pages to read from directly.
         self.recognizer: Optional[FaceRecognizer] = None
+        self.presence: Optional[FacePresenceManager] = None
         self.camera: Optional[CameraService] = None
-        self.greeting: Optional[GreetingService] = None
-        self.whisper: Optional[WhisperService] = None
-        self.scenario_engine: Optional[ScenarioEngine] = None
         self.playback: Optional[PlaybackService] = None
-        self.vad: Optional[VADHandler] = None
-        self.noise_suppressor: Optional[NoiseSuppressor] = None
-        self.audio: Optional[AudioService] = None
-        self.conversation: Optional[ConversationManager] = None
+        self.greeting: Optional[GreetingManager] = None
 
     def startup(self) -> None:
         """Run the application startup lifecycle.
 
-        Sequence (per ARCHITECTURE.md's Startup Sequence): load
-        configuration -> initialize logging -> initialize event bus ->
-        initialize shared state -> initialize the FSM -> initialize
-        service registry -> start any registered services -> enter
-        IDLE.
+        Sequence (per SYSTEM_ARCHITECTURE_V3.md's Startup Sequence):
+        load configuration -> initialize logging -> initialize event
+        bus -> initialize shared state -> initialize the FSM ->
+        initialize service registry -> start any registered services.
 
         Raises:
             ConfigurationError: if configuration cannot be loaded.
@@ -300,19 +298,22 @@ class Application:
         self.event_bus = EventBus()
         self.logger.info("Event bus initialized")
 
-        self.state = StateManager(initial_state="IDLE")
-        self.logger.info("Shared state initialized: state=%s", self.state.current_state)
+        self.state = StateManager(initial_state=FACE_DETECTION_MODE)
+        self.state.set_interaction_mode(load_interaction_mode())
+        self.logger.info(
+            "Shared state initialized: state=%s interaction_mode=%s",
+            self.state.current_state,
+            self.state.get_interaction_mode(),
+        )
 
         self.fsm = FiniteStateMachine(self.event_bus, self.state)
         self.logger.info("Finite State Machine initialized")
 
         self.registry = ServiceRegistry(self.logger)
-        self.logger.info("Service registry initialized (Milestone 1/2: no services registered yet)")
-
         self.registry.start_all()
 
         self.event_bus.publish("SYSTEM_STARTUP", {"config_path": str(self.config_path)})
-        self.logger.info("SYSTEM_STARTUP complete. Application entered IDLE state.")
+        self.logger.info("SYSTEM_STARTUP complete. Application entered %s.", self.state.current_state)
 
     def shutdown(self) -> None:
         """Run the application shutdown lifecycle: stop services, log completion."""
@@ -324,88 +325,52 @@ class Application:
         self.logger.info("SYSTEM_SHUTDOWN complete.")
 
     def start_full_system(self) -> None:
-        """Build, register, and start every robot service.
+        """Build, register, and start the full V3 face/greeting/playback pipeline.
 
         Extends startup() (foundation only: config/logging/event
-        bus/state/FSM/empty registry) with the full pipeline built
-        across Milestones 3-13: face recognition, camera, greeting,
-        Whisper, scenario matching, playback, VAD/interruption,
-        continuous microphone capture, and conversation orchestration.
-        Used by the Streamlit dashboard's cached singleton (see
-        get_running_application() below); the plain `python app.py`
-        CLI entry point (main()) intentionally stays foundation-only,
-        so it keeps working without camera or microphone hardware and
-        without paying Whisper's load cost.
+        bus/state/FSM/empty registry) with FaceRecognizer,
+        FacePresenceManager, CameraService, PlaybackService, and
+        GreetingManager. Used by the Streamlit dashboard's cached
+        singleton (see get_running_application() below); the plain
+        `python app.py` CLI entry point (main()) intentionally stays
+        foundation-only, so it keeps working without camera hardware.
         """
         self.startup()
         assert self.event_bus is not None and self.state is not None and self.registry is not None
         assert self.config is not None
 
-        self.recognizer = FaceRecognizer()
+        self.recognizer = FaceRecognizer(similarity_threshold=self.config.face_confidence)
+        self.presence = FacePresenceManager(
+            self.event_bus, self.state, face_lost_timeout=self.config.face_lost_timeout
+        )
+        self.playback = PlaybackService(self.event_bus)
+        self.greeting = GreetingManager(self.event_bus, self.state, self.playback)
         self.camera = CameraService(
             self.event_bus,
             self.state,
             self.recognizer,
+            self.presence,
             camera_index=self.config.camera_index,
             camera_width=self.config.camera_width,
             camera_height=self.config.camera_height,
             recognition_interval=self.config.recognition_interval,
-            face_lost_timeout=self.config.face_lost_timeout,
-        )
-        self.greeting = GreetingService(self.event_bus, self.state)
-        self.whisper = WhisperService(self.event_bus, self.state, model_size=self.config.whisper_model)
-        self.scenario_engine = ScenarioEngine(self.event_bus, self.state)
-        self.playback = PlaybackService(self.event_bus)
-        self.vad = VADHandler(
-            self.event_bus, self.state, self.playback, aggressiveness=self.config.vad_aggressiveness
-        )
-        self.noise_suppressor = NoiseSuppressor(
-            enabled=self.config.noise_suppression_enabled, engine=self.config.noise_suppression_engine
-        )
-        self.audio = AudioService(
-            self.event_bus,
-            self.state,
-            self.whisper,
-            self.vad,
-            noise_suppressor=self.noise_suppressor,
-            device=self.config.audio_input_device,
-        )
-        self.conversation = ConversationManager(
-            self.event_bus, self.state, self.playback, timeout_seconds=self.config.conversation_timeout
         )
 
-        for service in (
-            self.camera,
-            self.greeting,
-            self.whisper,
-            self.scenario_engine,
-            self.playback,
-            self.vad,
-            # Must start before self.audio: AudioService's capture thread
-            # calls noise_suppressor.process() on its very first frame,
-            # so the RNNoise engine needs to already be initialized.
-            self.noise_suppressor,
-            self.audio,
-            self.conversation,
-        ):
+        for service in (self.playback, self.camera):
             self.registry.register(service)
 
         self.registry.start_all()
         self.logger.info("Full system started: all services registered and running")
 
 
-@st.cache_resource(show_spinner="Starting EthioChatbot V2 engine...")
+@st.cache_resource(show_spinner="Starting EthioChatbot V3 engine...")
 def get_running_application() -> Application:
     """Return the single, process-wide running Application instance.
 
     Cached via Streamlit's st.cache_resource, so it is created exactly
     once per server process and reused across every page and every
-    Streamlit rerun. This is the singleton pattern decided for this
-    project: Streamlit reruns the whole script on each interaction,
-    but background services (camera thread, greeting thread, etc.)
-    must not be restarted on every rerun -- every pages/*.py module
-    that needs the live engine calls this instead of constructing its
-    own Application.
+    Streamlit rerun -- background services (camera thread, playback
+    watcher, etc.) must not be restarted on every rerun.
     """
     app = Application()
     app.start_full_system()
@@ -417,25 +382,16 @@ def main() -> int:
 
     Registers SIGINT/SIGTERM handlers when safe to do so, runs
     startup, and guarantees shutdown runs even if an error occurs.
-    Milestone 1 has no long-running services yet, so the process
-    returns immediately after a successful startup/shutdown cycle;
-    later milestones will block here while camera/audio/conversation
-    services run.
+    This foundation-only path has no long-running services registered
+    (see start_full_system() for the full pipeline used by the
+    Streamlit dashboard); it returns immediately after a successful
+    startup/shutdown cycle.
 
     Signal registration only works on the main thread of the main
     interpreter -- calling signal.signal() anywhere else raises
     ValueError. Streamlit's ScriptRunner executes this module via
     exec() on a worker thread while still setting __name__ to
-    "__main__" (to preserve normal script semantics for
-    `streamlit run app.py`), so this module's own
-    `if __name__ == "__main__":` guard below fires under Streamlit
-    too, reaching main() on a non-main thread. Rather than register
-    unconditionally and crash there, this checks first and skips
-    registration when unsafe; graceful shutdown is unaffected, since
-    it runs from the try/finally below regardless of whether OS
-    signal handlers were registered -- those handlers are an
-    enhancement (let Ctrl-C/SIGTERM trigger the same clean shutdown),
-    not what makes shutdown graceful.
+    "__main__", so this checks first and skips registration when unsafe.
 
     Returns:
         Process exit code: 0 on success, 1 on startup failure.
@@ -466,10 +422,7 @@ def main() -> int:
         return 1
 
     try:
-        app.logger.info(
-            "Application foundation ready (Milestone 1/2). "
-            "No long-running services are registered yet."
-        )
+        app.logger.info("Application foundation ready. No long-running services are registered yet.")
     finally:
         app.shutdown()
 
@@ -480,17 +433,9 @@ if __name__ == "__main__" and threading.current_thread() is threading.main_threa
     # The extra main-thread check (beyond the usual __name__ guard) is
     # required because Streamlit's ScriptRunner executes this module via
     # exec() on a worker thread while still setting __name__ to
-    # "__main__" (to preserve normal script semantics for
-    # `streamlit run app.py`), which would otherwise call main() there
-    # too. That matters beyond just the signal-handling issue this
-    # guards against: main()'s sys.exit() raises SystemExit, a
-    # BaseException that Streamlit's own script-execution wrapper
-    # (exec_func_with_error_handling) does not catch -- it only catches
-    # RerunException, StopException, FragmentHandledException, and
-    # Exception -- so an unhandled SystemExit would escape into
-    # Streamlit's internals on that worker thread instead of cleanly
-    # exiting the process, which is what sys.exit() is for. Streamlit
-    # pages always use get_running_application() (see above), never
-    # main(), so skipping main() entirely under Streamlit loses no
-    # functionality.
+    # "__main__", which would otherwise call main() there too --
+    # main()'s sys.exit() raises SystemExit, which Streamlit's own
+    # script-execution wrapper does not catch. Streamlit pages always
+    # use get_running_application() instead, so skipping main() entirely
+    # under Streamlit loses no functionality.
     sys.exit(main())

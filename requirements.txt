@@ -1,9 +1,7 @@
 streamlit==1.59.2
 opencv-python==5.0.0.93
-dlib==20.0.1
 numpy==2.4.6
-openai-whisper==20250625
-webrtcvad==2.0.10
-sounddevice==0.5.5
 pygame==2.6.1
-pyrnnoise==0.4.3
+mediapipe==0.10.35
+insightface==1.0.1
+onnxruntime==1.27.0

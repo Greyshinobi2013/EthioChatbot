@@ -1,21 +1,22 @@
-"""Audio playback engine for EthioChatbot V2.
+"""Audio playback engine for EthioChatbot V3.
 
-Plays prerecorded WAV/MP3 response audio with pause, resume, and
-restart support, per ARCHITECTURE.md's Playback Service
-responsibilities.
+Plays prerecorded WAV/MP3 audio with pause, resume, and restart
+support, per SYSTEM_ARCHITECTURE_V3.md's Playback Service
+responsibilities and DEVELOPMENT_RULES_V3.md Rule 18 (this is the only
+component allowed to control audio -- utils/greeting_manager.py is its
+sole caller, for both greetings and dialogs).
 
 Resume is implemented with pygame's Channel.pause()/unpause() rather
 than a manual seek-and-replay. A pygame Sound is fully decoded into
 memory up front, so pausing a Channel only stops its internal read
 cursor -- it does not stop and restart the sound. This makes resume
 sample-accurate even for WAV, where a naive seek-based approach is
-unreliable across pygame/SDL_mixer versions, satisfying README's
-"Playback must not restart" requirement.
-
-Distinct from utils/greeting_service.py's minimal blocking WAV player:
-greetings are never interrupted (STATE_MACHINE.md marks
-GREETING -> INTERRUPTED as an invalid transition), so they don't need
-this engine's pause/resume/position-tracking machinery.
+unreliable across pygame/SDL_mixer versions, satisfying the Dialog
+Interruption Framework's "must not restart from the beginning"
+requirement. Per STATE_MACHINE_V3.md, only dialog playback is ever
+paused -- greeting_manager.py never calls pause_audio() while a
+greeting is playing, since PLAY_GREETINGS has no INTERRUPT_DIALOG
+transition in fsm.py's transition table.
 """
 from __future__ import annotations
 

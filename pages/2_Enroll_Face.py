@@ -1,27 +1,16 @@
-"""Face enrollment page for EthioChatbot V2's Streamlit dashboard.
+"""Face enrollment page for EthioChatbot V3's Streamlit dashboard.
 
-Presentation-layer only: this page collects user input (camera
-capture or upload, user ID, priority, preferred language) and shows
-the existing enrolled user list, delegating all face detection,
-embedding generation, and persistence to utils.face_enrollment, per
-ARCHITECTURE.md's rule that Streamlit pages must not contain business
-logic.
+Presentation-layer only: collects user input (camera capture or
+upload for each of the three required angles, user ID, priority,
+preferred language) and shows the existing enrolled user list,
+delegating all detection, alignment, embedding generation, and
+persistence to utils.face_enrollment, per DEVELOPMENT_RULES_V3.md's
+rule that Streamlit pages must not contain business logic.
 
 Camera capture reads frames from the shared utils.camera_service.py
-CameraService (the same live feed the Dashboard shows), rather than
-opening its own capture device. ARCHITECTURE.md specifies exactly one
-camera owner -- CameraService -- and st.camera_input() would violate
-that: it acquires a *browser-side* webcam stream via the client's own
-getUserMedia(), a second, independent camera acquisition path that
-has nothing to do with the server-side OpenCV device CameraService
-already owns and is continuously capturing from. On a robot whose
-camera is physical hardware attached to the machine running the
-service (not necessarily the machine running the browser), that
-second path is not just redundant but often cannot work at all --
-exactly the symptom reported: the backend camera demonstrably works
-(FACE_DETECTED events publishing continuously) while the browser
-sits at its own "would like to use your camera" permission prompt for
-an unrelated, client-side device.
+CameraService (the same live feed the Dashboard shows) rather than
+opening a second, independent browser-side camera stream -- there is
+exactly one camera owner, CameraService.
 """
 from __future__ import annotations
 
@@ -33,6 +22,7 @@ import streamlit as st
 
 from app import get_running_application
 from utils.face_enrollment import (
+    ENROLLMENT_ANGLES,
     SUPPORTED_LANGUAGES,
     FaceEnrollmentError,
     decode_image_bytes,
@@ -40,94 +30,101 @@ from utils.face_enrollment import (
     load_users,
 )
 
-st.set_page_config(page_title="Enroll Face - EthioChatbot V2", page_icon="🧑‍💼")
-st.title("Enroll Face")
-st.caption("Register a new user, or re-enroll an existing one, with a face image, priority, and preferred language.")
+st.set_page_config(page_title="Enroll face - EthioChatbot V3", page_icon=":material/person_add:")
+st.title("Enroll face")
+st.caption(
+    "Register a new user, or re-enroll an existing one, with three face images "
+    "(front, left profile, right profile), a priority, and a preferred language."
+)
 
-st.subheader("1. Capture or upload a face image")
-capture_method = st.radio("Image source", ["Camera (shared with the robot)", "Upload"], horizontal=True)
+ANGLE_LABELS = {"front": "Front face", "left": "Left profile", "right": "Right profile"}
 
-image_bgr: Optional[np.ndarray] = None
 
-if capture_method == "Camera (shared with the robot)":
-    application = get_running_application()
+def _capture_angle(angle: str, application) -> Optional[np.ndarray]:
+    """Render the capture/upload UI for one enrollment angle.
+
+    Returns the captured BGR image for this angle, from session state
+    if already captured this run, else None.
+    """
+    state_key = f"enroll_{angle}_frame"
+    st.markdown(f"**{ANGLE_LABELS[angle]}**")
+
+    source = st.radio(
+        "Image source", ["Camera", "Upload"], horizontal=True, key=f"enroll_{angle}_source", label_visibility="collapsed"
+    )
+
+    if source == "Upload":
+        uploaded_file = st.file_uploader(
+            "Upload an image", type=["jpg", "jpeg", "png"], key=f"enroll_{angle}_upload", label_visibility="collapsed"
+        )
+        if uploaded_file is not None:
+            st.session_state[state_key] = decode_image_bytes(uploaded_file.getvalue())
+        return st.session_state.get(state_key)
+
     if application.camera is None:
-        st.warning("Camera service is not running yet. Open the Dashboard once to start the full system, then return here.")
+        st.warning("Camera service is not running yet. Open the Dashboard once to start the full system.")
+        return st.session_state.get(state_key)
+
+    if state_key in st.session_state:
+        st.image(
+            st.session_state[state_key][:, :, ::-1],
+            channels="RGB",
+            caption=f"Captured ({ANGLE_LABELS[angle]})",
+            width="stretch",
+        )
+        if st.button("Retake", key=f"enroll_{angle}_retake", icon=":material/replay:"):
+            del st.session_state[state_key]
+            st.rerun()
     else:
         latest_frame = application.camera.latest_frame
-
-        if "enroll_captured_frame" in st.session_state:
-            st.image(
-                st.session_state["enroll_captured_frame"][:, :, ::-1],
-                channels="RGB",
-                caption="Captured photo (ready to enroll)",
-                width="stretch",
-            )
-            image_bgr = st.session_state["enroll_captured_frame"]
-            if st.button("Retake"):
-                del st.session_state["enroll_captured_frame"]
+        if latest_frame is not None:
+            st.image(latest_frame[:, :, ::-1], channels="RGB", caption="Live camera feed", width="stretch")
+            if st.button("Capture photo", key=f"enroll_{angle}_capture", icon=":material/photo_camera:", type="primary"):
+                st.session_state[state_key] = latest_frame.copy()
                 st.rerun()
         else:
-            if latest_frame is not None:
-                st.image(
-                    latest_frame[:, :, ::-1],
-                    channels="RGB",
-                    caption="Live camera feed (from CameraService)",
-                    width="stretch",
-                )
-            else:
-                st.info("No camera frame available yet.")
+            st.info("No camera frame available yet.")
 
-            # Defaults to off, matching pages/1_Dashboard.py's identical
-            # pattern: if this defaulted on, the script would keep
-            # rerunning itself indefinitely with no user interaction
-            # required to stop it, which is wasteful and (observed while
-            # verifying this fix) breaks headless test harnesses that
-            # wait for a script run to settle.
-            auto_refresh = st.checkbox("Auto-refresh preview", value=False)
-            if st.button("Capture Photo", type="primary", disabled=latest_frame is None):
-                st.session_state["enroll_captured_frame"] = latest_frame.copy()
-                st.rerun()
-            elif auto_refresh:
-                time.sleep(1)
-                st.rerun()
-else:
-    uploaded_file = st.file_uploader("Upload a face image", type=["jpg", "jpeg", "png"])
-    if uploaded_file is not None:
-        image_bgr = decode_image_bytes(uploaded_file.getvalue())
+    return st.session_state.get(state_key)
+
+
+application = get_running_application()
+
+st.subheader("1. Capture three face images")
+angle_images = {}
+columns = st.columns(3)
+for column, angle in zip(columns, ENROLLMENT_ANGLES):
+    with column:
+        angle_images[angle] = _capture_angle(angle, application)
 
 st.subheader("2. User details")
 user_id = st.text_input("User ID", placeholder="e.g. natnael")
 priority = st.number_input("Priority (lower number = higher priority)", min_value=0, value=1, step=1)
 preferred_language = st.selectbox("Preferred language", SUPPORTED_LANGUAGES)
 
-if st.button("Enroll User", type="primary", disabled=image_bgr is None):
+all_captured = all(angle_images[angle] is not None for angle in ENROLLMENT_ANGLES)
+
+if st.button("Enroll user", type="primary", disabled=not all_captured):
     if not user_id.strip():
         st.error("User ID is required.")
-    elif image_bgr is None:
-        st.error("Please capture a photo from the camera or upload an image first.")
     else:
         try:
             record = enroll_user(
                 user_id=user_id,
                 priority=int(priority),
                 preferred_language=preferred_language,
-                image_bgr=image_bgr,
+                front_image_bgr=angle_images["front"],
+                left_image_bgr=angle_images["left"],
+                right_image_bgr=angle_images["right"],
             )
-            st.session_state.pop("enroll_captured_frame", None)
+            for angle in ENROLLMENT_ANGLES:
+                st.session_state.pop(f"enroll_{angle}_frame", None)
 
-            # enroll_user() only writes to disk (faces/users.json,
-            # faces/images/, faces/embeddings/); it has no reference to
-            # the live FaceRecognizer CameraService is using, which
-            # loaded its in-memory embedding cache once at application
-            # startup and is never told to refresh. Without this call,
-            # the newly enrolled user is fully persisted but invisible
-            # to recognition until the process restarts. CameraService
-            # holds the exact same FaceRecognizer instance (not a
-            # copy), so refreshing it here immediately updates what the
-            # live camera pipeline recognizes -- no other plumbing
-            # needed, and no restart required.
-            application = get_running_application()
+            # enroll_user() only writes to disk; the live FaceRecognizer
+            # CameraService is using loaded its embedding cache once at
+            # startup. CameraService holds the exact same FaceRecognizer
+            # instance (not a copy), so refreshing it here immediately
+            # updates what the live camera pipeline recognizes.
             if application.recognizer is not None:
                 application.recognizer.reload_embeddings()
 
@@ -135,11 +132,16 @@ if st.button("Enroll User", type="primary", disabled=image_bgr is None):
                 f"Enrolled '{record.user_id}' successfully "
                 f"(priority={record.priority}, language={record.preferred_language})."
             )
+            time.sleep(1)
+            st.rerun()
         except FaceEnrollmentError as exc:
             st.error(str(exc))
 
+if not all_captured:
+    st.caption("Capture or upload all three angles above to enable enrollment.")
+
 st.divider()
-st.subheader("Enrolled Users")
+st.subheader("Enrolled users")
 users = load_users()
 if not users:
     st.info("No users enrolled yet.")
@@ -149,9 +151,9 @@ else:
             {
                 "User ID": user.user_id,
                 "Priority": user.priority,
-                "Preferred Language": user.preferred_language,
-                "Image Path": user.image_path,
-                "Embedding Path": user.embedding_path,
+                "Language": user.preferred_language,
+                "Greeting audio": user.greeting_audio,
+                "Dialog audio": user.dialog_audio,
             }
             for user in sorted(users, key=lambda u: u.priority)
         ],

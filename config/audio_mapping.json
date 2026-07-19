@@ -1,9 +1,0 @@
-{
-  "interaction_mode": "common_dialog",
-
-  "common_dialog": {
-    "english": "audio/english/dialogs/"name.wav,
-    "amharic": "audio/amharic/dialogs/name.wav",
-    "arabic": "audio/arabic/dialogs/name.wav"
-  }
-}
