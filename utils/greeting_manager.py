@@ -28,6 +28,12 @@ Greeting persistence needs no explicit "already greeted" clearing on
 FACE_LOST: utils/face_presence_manager.py removes the ActiveUser
 entry entirely on FACE_LOST, so a later re-sighting creates a fresh
 entry with greeted=False by construction (see utils/state_manager.py).
+The one deliberate exception is the operator-triggered RESTART_GREETINGS
+event (Dashboard's "Restart Greetings" button, fsm.py's
+(MONITORING, "RESTART_GREETINGS") -> PRIORITY_SORTING transition):
+_on_state_changed() below explicitly clears every active user's
+greeted flag first, so the full pipeline replays for everyone still
+visible without requiring them to leave and return.
 """
 from __future__ import annotations
 
@@ -93,6 +99,13 @@ class GreetingManager:
         trigger_event = event.payload.get("event")
 
         if to_state == PRIORITY_SORTING:
+            if trigger_event == "RESTART_GREETINGS":
+                # Operator-triggered replay: force every currently
+                # active user back through the pipeline by clearing
+                # their greeted flag before (re)sorting, rather than
+                # touching face presence/recognition state at all.
+                self._state.clear_all_greeted()
+                logger.info("RESTART_GREETINGS: greeted flags cleared for all active users")
             self._handle_priority_sorting()
         elif to_state == GREETING_QUEUE:
             self._handle_greeting_queue()

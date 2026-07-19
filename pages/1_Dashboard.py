@@ -99,6 +99,19 @@ with right:
                 width="stretch",
                 hide_index=True,
             )
+        # Replays greetings + dialogs for everyone currently visible,
+        # without touching recognition, presence, enrollment, priority,
+        # or language data -- see fsm.py's RESTART_GREETINGS transition
+        # and greeting_manager.py's handling of it. Only meaningful from
+        # MONITORING with at least one active user; otherwise the FSM
+        # has nothing queued to restart.
+        if st.button(
+            "Restart Greetings",
+            icon=":material/replay:",
+            disabled=not (active_users and snapshot["current_state"] == "MONITORING"),
+        ):
+            application.event_bus.publish("RESTART_GREETINGS", {})
+            st.rerun()
 
     with st.container(border=True):
         st.subheader("Playback status")

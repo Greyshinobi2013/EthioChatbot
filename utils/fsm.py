@@ -73,6 +73,14 @@ _TRANSITIONS: Dict[Tuple[str, str], str] = {
     (MONITORING, "NEW_USER_DETECTED"): FACE_RECOGNIZED,
     (MONITORING, "FACE_LOST"): MONITORING,
     (MONITORING, "ALL_USERS_LOST"): FACE_DETECTION_MODE,
+    # Operator-triggered replay (Dashboard's "Restart Greetings" button),
+    # not part of STATE_MACHINE_V3.md's original event catalog. Reuses
+    # the existing PRIORITY_SORTING entry point rather than inventing a
+    # new state: greeting_manager.py detects this specific trigger event
+    # and clears greeted flags for currently-active users first, so the
+    # normal PRIORITY_SORTING -> GREETING_QUEUE -> PLAY_GREETINGS ->
+    # dialog -> MONITORING pipeline replays for everyone still visible.
+    (MONITORING, "RESTART_GREETINGS"): PRIORITY_SORTING,
 }
 
 # Extra (from_state -> possible next states) entries for the two

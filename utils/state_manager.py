@@ -135,6 +135,18 @@ class StateManager:
             if user is not None:
                 user.greeted = True
 
+    def clear_all_greeted(self) -> None:
+        """Reset greeted=False for every currently active user.
+
+        Used by the Restart Greetings operator action (RESTART_GREETINGS
+        event) to force a full replay for everyone still visible,
+        without touching presence tracking, enrollment, priority, or
+        language data -- only the greeted flag is affected.
+        """
+        with self._lock:
+            for user in self._active_users.values():
+                user.greeted = False
+
     # -- Greeting queue (for dashboard display) --------------------------
 
     def set_greeting_queue(self, queue: List[str]) -> None:
