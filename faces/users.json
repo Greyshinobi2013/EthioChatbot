@@ -37,5 +37,31 @@
     "front_embedding_path": "faces/embeddings/bruk_front.npy",
     "left_embedding_path": "faces/embeddings/bruk_left.npy",
     "right_embedding_path": "faces/embeddings/bruk_right.npy"
+  },
+  {
+    "user_id": "Tsigabu",
+    "priority": 4,
+    "preferred_language": "english",
+    "greeting_audio": "audio/english/greetings/Tsigabu.wav",
+    "dialog_audio": "audio/english/dialogs/Tsigabu.wav",
+    "front_image_path": "faces/images/Tsigabu_front.jpg",
+    "left_image_path": "faces/images/Tsigabu_left.jpg",
+    "right_image_path": "faces/images/Tsigabu_right.jpg",
+    "front_embedding_path": "faces/embeddings/Tsigabu_front.npy",
+    "left_embedding_path": "faces/embeddings/Tsigabu_left.npy",
+    "right_embedding_path": "faces/embeddings/Tsigabu_right.npy"
+  },
+  {
+    "user_id": "Nur",
+    "priority": 5,
+    "preferred_language": "english",
+    "greeting_audio": "audio/english/greetings/Nur.wav",
+    "dialog_audio": "audio/english/dialogs/Nur.wav",
+    "front_image_path": "faces/images/Nur_front.jpg",
+    "left_image_path": "faces/images/Nur_left.jpg",
+    "right_image_path": "faces/images/Nur_right.jpg",
+    "front_embedding_path": "faces/embeddings/Nur_front.npy",
+    "left_embedding_path": "faces/embeddings/Nur_left.npy",
+    "right_embedding_path": "faces/embeddings/Nur_right.npy"
   }
 ]

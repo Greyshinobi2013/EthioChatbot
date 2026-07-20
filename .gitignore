@@ -1,17 +1,26 @@
-/Chatbot
-
+# Python
 __pycache__/
 *.pyc
+*.pyo
+
+# Virtual environments
 .venv/
 venv/
+
+# Logs
 logs/*.log
+
+# Streamlit
 .streamlit/
+
+# Debug
 debug_audio/
 
+# AI model artifacts
 models/*.dat
 models/*.onnx
 models/*.tflite
 
-documents/
-.claude/skills
-.agents/skills
+# Claude local files
+.claude/skills/
+.agents/skills/
