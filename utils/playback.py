@@ -31,6 +31,7 @@ import pygame
 
 from utils.event_bus import EventBus
 from utils.logger import get_logger
+from utils.state_manager import StateManager
 
 logger = get_logger(__name__)
 
@@ -80,13 +81,19 @@ class PlaybackService:
 
     name = "playback_service"
 
-    def __init__(self, event_bus: Optional[EventBus] = None) -> None:
+    def __init__(self, event_bus: Optional[EventBus] = None, state_manager: Optional[StateManager] = None) -> None:
         """Args:
             event_bus: Bus to publish PLAYBACK_STARTED/PAUSED/RESUMED/
                 STOPPED/FINISHED on. Optional so this can be used
                 standalone without full app wiring.
+            state_manager: Shared state this service pushes its status
+                into after every transition, for the dashboard's
+                Playback Status display and the Restart Greetings
+                button's pause detection. Optional for the same reason
+                as event_bus.
         """
         self._bus = event_bus
+        self._state_manager = state_manager
         self._lock = threading.RLock()
 
         self._sound: Optional[pygame.mixer.Sound] = None
@@ -148,6 +155,7 @@ class PlaybackService:
 
         logger.info("PLAYBACK_STARTED: %s", path)
         self._publish("PLAYBACK_STARTED", {"audio": str(path)})
+        self._sync_state()
         self._start_watcher()
 
     def pause_audio(self) -> None:
@@ -163,6 +171,7 @@ class PlaybackService:
 
         logger.info("PLAYBACK_PAUSED: %s", self._current_file)
         self._publish("PLAYBACK_PAUSED", {})
+        self._sync_state()
 
     def resume_audio(self) -> None:
         """Resume playback from exactly where it was paused.
@@ -181,6 +190,7 @@ class PlaybackService:
 
         logger.info("PLAYBACK_RESUMED: %s", self._current_file)
         self._publish("PLAYBACK_RESUMED", {})
+        self._sync_state()
 
     def restart_audio(self) -> None:
         """Replay the currently loaded audio file from the beginning.
@@ -204,6 +214,7 @@ class PlaybackService:
 
         logger.info("Playback restarted: %s", self._current_file)
         self._publish("PLAYBACK_STARTED", {"audio": str(self._current_file)})
+        self._sync_state()
         self._start_watcher()
 
     def stop_audio(self) -> None:
@@ -221,6 +232,7 @@ class PlaybackService:
 
         logger.info("PLAYBACK_STOPPED: %s", stopped_file)
         self._publish("PLAYBACK_STOPPED", {})
+        self._sync_state()
 
     def get_status(self) -> PlaybackStatus:
         """Return a point-in-time snapshot of playback state and position."""
@@ -274,6 +286,7 @@ class PlaybackService:
             if finished_file is not None:
                 logger.info("PLAYBACK_FINISHED: %s", finished_file)
                 self._publish("PLAYBACK_FINISHED", {})
+                self._sync_state()
                 return
 
             time.sleep(0.05)
@@ -281,3 +294,16 @@ class PlaybackService:
     def _publish(self, event_name: str, payload: dict) -> None:
         if self._bus is not None:
             self._bus.publish(event_name, payload)
+
+    def _sync_state(self) -> None:
+        if self._state_manager is None:
+            return
+        status = self.get_status()
+        self._state_manager.set_playback_status(
+            {
+                "state": status.state.value,
+                "current_file": status.current_file,
+                "position_seconds": status.position_seconds,
+                "duration_seconds": status.duration_seconds,
+            }
+        )

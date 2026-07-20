@@ -34,6 +34,7 @@ from utils.face_presence_manager import FacePresenceManager
 from utils.face_recognition import FaceRecognizer
 from utils.fsm import FACE_DETECTION_MODE, FiniteStateMachine
 from utils.greeting_manager import GreetingManager
+from utils.head_motion_controller import HeadMotionController
 from utils.logger import configure_logging, get_logger
 from utils.playback import PlaybackService
 from utils.state_manager import StateManager
@@ -49,6 +50,8 @@ REQUIRED_CONFIG_KEYS = (
     "recognition_interval",
     "face_confidence",
     "face_lost_timeout",
+    "yaw_servo_pin",
+    "pitch_servo_pin",
 )
 
 INTERACTION_MODES = ("common_dialog", "user_specific_dialog")
@@ -74,6 +77,10 @@ class AppConfig:
             a match (higher = stricter). Note: this key held the
             opposite semantics (a max dlib L2 distance) before V3.
         face_lost_timeout: Seconds of absence before FACE_LOST fires.
+        yaw_servo_pin: GPIO pin the yaw (horizontal) neck servo is
+            wired to.
+        pitch_servo_pin: GPIO pin the pitch (vertical) neck servo is
+            wired to.
     """
 
     camera_index: int
@@ -82,6 +89,8 @@ class AppConfig:
     recognition_interval: int
     face_confidence: float
     face_lost_timeout: int
+    yaw_servo_pin: int
+    pitch_servo_pin: int
 
     @classmethod
     def from_dict(cls, data: dict) -> "AppConfig":
@@ -277,6 +286,7 @@ class Application:
         self.camera: Optional[CameraService] = None
         self.playback: Optional[PlaybackService] = None
         self.greeting: Optional[GreetingManager] = None
+        self.head_motion: Optional[HeadMotionController] = None
 
     def startup(self) -> None:
         """Run the application startup lifecycle.
@@ -329,11 +339,12 @@ class Application:
 
         Extends startup() (foundation only: config/logging/event
         bus/state/FSM/empty registry) with FaceRecognizer,
-        FacePresenceManager, CameraService, PlaybackService, and
-        GreetingManager. Used by the Streamlit dashboard's cached
-        singleton (see get_running_application() below); the plain
-        `python app.py` CLI entry point (main()) intentionally stays
-        foundation-only, so it keeps working without camera hardware.
+        FacePresenceManager, CameraService, PlaybackService,
+        HeadMotionController, and GreetingManager. Used by the
+        Streamlit dashboard's cached singleton (see
+        get_running_application() below); the plain `python app.py`
+        CLI entry point (main()) intentionally stays foundation-only,
+        so it keeps working without camera or servo hardware.
         """
         self.startup()
         assert self.event_bus is not None and self.state is not None and self.registry is not None
@@ -343,8 +354,14 @@ class Application:
         self.presence = FacePresenceManager(
             self.event_bus, self.state, face_lost_timeout=self.config.face_lost_timeout
         )
-        self.playback = PlaybackService(self.event_bus)
-        self.greeting = GreetingManager(self.event_bus, self.state, self.playback)
+        self.playback = PlaybackService(self.event_bus, self.state)
+        self.head_motion = HeadMotionController(
+            self.event_bus,
+            self.state,
+            yaw_pin=self.config.yaw_servo_pin,
+            pitch_pin=self.config.pitch_servo_pin,
+        )
+        self.greeting = GreetingManager(self.event_bus, self.state, self.playback, self.head_motion)
         self.camera = CameraService(
             self.event_bus,
             self.state,
@@ -354,9 +371,10 @@ class Application:
             camera_width=self.config.camera_width,
             camera_height=self.config.camera_height,
             recognition_interval=self.config.recognition_interval,
+            head_motion=self.head_motion,
         )
 
-        for service in (self.playback, self.camera):
+        for service in (self.playback, self.head_motion, self.camera):
             self.registry.register(service)
 
         self.registry.start_all()

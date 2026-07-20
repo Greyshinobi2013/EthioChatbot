@@ -11,18 +11,22 @@ transition logic of its own (fsm.py owns validating/applying
 transitions; this module only decides *when* to publish the event
 that requests one).
 
-Mode A vs Mode B ordering: PROJECT_SPECIFICATION_V3.md's illustrative
-Mode B diagrams show each user's greeting immediately followed by
-their own dialog (interleaved). STATE_MACHINE_V3.md -- authoritative
-for FSM behavior per DEVELOPMENT_RULES_V3.md Rule 19/CLAUDE.md's FSM
-Rules -- instead defines PLAY_GREETINGS and PLAY_USER_DIALOGS as two
-separate, sequential states, with PLAY_GREETINGS's own description
-covering "all users in queue". This module follows the state machine
-literally: every queued user's greeting plays first (priority order),
-then every queued user's dialog plays (same order), rather than
-interleaving -- both orders produce every user hearing their greeting
-and their dialog exactly once, in priority order, so nothing in
-ACCEPTANCE_TESTS_V3.md distinguishes between them.
+Mode B ordering is strictly per-user: (Greeting + Nod + Dialog) for
+one user, completing in full, before the next user's greeting begins
+-- never "all greetings, then all dialogs". PLAY_GREETINGS and
+PLAY_USER_DIALOGS remain exactly the two FSM states STATE_MACHINE_V3.md
+defines (no new states are introduced); Mode B simply revisits them
+once per queued user instead of passing through each of them only
+once. Each visit to PLAY_GREETINGS plays exactly one user's greeting
+(_advance_greeting() is called without resetting _play_index between
+users), then ALL_GREETINGS_FINISHED hands off to PLAY_USER_DIALOGS for
+that same user's dialog; on completion, USER_DIALOGS_FINISHED carries a
+"more_users_remaining" flag (see fsm.py's conditional resolution of
+that event) that sends the FSM back to PLAY_GREETINGS for the next
+user, or on to MONITORING once the queue is exhausted. Mode A is
+unaffected: PLAY_GREETINGS still plays every queued user's greeting in
+one visit before ALL_GREETINGS_FINISHED hands off to the single
+PLAY_COMMON_DIALOG.
 
 Greeting persistence needs no explicit "already greeted" clearing on
 FACE_LOST: utils/face_presence_manager.py removes the ActiveUser
@@ -30,10 +34,17 @@ entry entirely on FACE_LOST, so a later re-sighting creates a fresh
 entry with greeted=False by construction (see utils/state_manager.py).
 The one deliberate exception is the operator-triggered RESTART_GREETINGS
 event (Dashboard's "Restart Greetings" button, fsm.py's
-(MONITORING, "RESTART_GREETINGS") -> PRIORITY_SORTING transition):
-_on_state_changed() below explicitly clears every active user's
-greeted flag first, so the full pipeline replays for everyone still
-visible without requiring them to leave and return.
+(MONITORING, "RESTART_GREETINGS") and (PAUSED_DIALOG,
+"RESTART_GREETINGS") -> GREETING_QUEUE transitions): _on_state_changed()
+below explicitly clears every active user's greeted flag and re-sorts
+them by priority first, so the full pipeline replays for everyone
+still visible without requiring them to leave and return.
+
+Per HEAD_MOTION_SPECIFICATION_V3.md, every greeting must be
+accompanied by exactly one pitch-nod sequence. This module owns no
+servo logic itself (utils/head_motion_controller.py does); it only
+calls head_motion.greet_nod() alongside each greeting's play_audio(),
+mirroring how it is the sole caller of utils/playback.py.
 """
 from __future__ import annotations
 
@@ -50,6 +61,7 @@ from utils.fsm import (
     PLAY_USER_DIALOGS,
     PRIORITY_SORTING,
 )
+from utils.head_motion_controller import HeadMotionController
 from utils.logger import get_logger
 from utils.playback import PlaybackError, PlaybackService
 from utils.priority_manager import sort_by_priority
@@ -69,7 +81,11 @@ class GreetingManager:
     """Builds the greeting queue and drives greeting/dialog playback."""
 
     def __init__(
-        self, event_bus: EventBus, state_manager: StateManager, playback_service: PlaybackService
+        self,
+        event_bus: EventBus,
+        state_manager: StateManager,
+        playback_service: PlaybackService,
+        head_motion: Optional[HeadMotionController] = None,
     ) -> None:
         """Args:
             event_bus: Bus this manager subscribes to (STATE_CHANGED,
@@ -79,10 +95,15 @@ class GreetingManager:
             state_manager: Shared state read for active users and
                 written for the greeting queue / greeted flags.
             playback_service: The sole audio playback controller.
+            head_motion: Controller whose greet_nod() is called
+                alongside each greeting's audio. Optional so this
+                manager remains usable without head-motion hardware
+                wired up.
         """
         self._bus = event_bus
         self._state = state_manager
         self._playback = playback_service
+        self._head_motion = head_motion
 
         self._sorted_users: List[ActiveUser] = []
         self._queue: List[ActiveUser] = []
@@ -99,11 +120,14 @@ class GreetingManager:
         trigger_event = event.payload.get("event")
 
         if to_state == PRIORITY_SORTING:
+            self._handle_priority_sorting()
+        elif to_state == GREETING_QUEUE:
             if trigger_event == "RESTART_GREETINGS":
-                # Operator-triggered replay, possibly fired mid-greeting
-                # or mid-dialog (playing or paused): stop whatever audio
-                # is currently loaded first -- a manual stop_audio(),
-                # not a natural finish, so it does not publish
+                # Operator-triggered replay, fired from MONITORING or
+                # PAUSED_DIALOG (fsm.py's only two valid source states,
+                # per STATE_MACHINE_V3.md): stop whatever audio is
+                # currently loaded first -- a manual stop_audio(), not
+                # a natural finish, so it does not publish
                 # PLAYBACK_FINISHED and cannot race with
                 # _on_playback_finished below. _phase is cleared too, so
                 # a PLAYBACK_FINISHED that was already in flight before
@@ -111,16 +135,28 @@ class GreetingManager:
                 self._playback.stop_audio()
                 self._phase = None
                 # Force every currently active user back through the
-                # pipeline by clearing their greeted flag before
-                # (re)sorting, rather than touching face
-                # presence/recognition state at all.
+                # pipeline by clearing their greeted flag, rather than
+                # touching face presence/recognition state at all, then
+                # re-sort them by priority -- this transition bypasses
+                # PRIORITY_SORTING as a distinct FSM state, so sorting
+                # has to happen here instead of _handle_priority_sorting().
                 self._state.clear_all_greeted()
-                logger.info("RESTART_GREETINGS: playback stopped, greeted flags cleared for all active users")
-            self._handle_priority_sorting()
-        elif to_state == GREETING_QUEUE:
+                active_users = self._state.get_active_users()
+                self._sorted_users = sort_by_priority(active_users)
+                logger.info(
+                    "RESTART_GREETINGS: playback stopped, greeted flags cleared, queue rebuilt: %s",
+                    [user.user_id for user in self._sorted_users],
+                )
             self._handle_greeting_queue()
         elif to_state == PLAY_GREETINGS:
-            self._start_greetings()
+            if trigger_event == "USER_DIALOGS_FINISHED":
+                # Mode B: moving on to the next queued user's greeting.
+                # _play_index already points at them (left there by the
+                # previous cycle's _advance_greeting() call) -- do not
+                # reset it, unlike a fresh _start_greetings().
+                self._play_current_greeting()
+            else:
+                self._start_greetings()
         elif to_state == PLAY_COMMON_DIALOG:
             if trigger_event == "RESUME_DIALOG":
                 self._playback.resume_audio()
@@ -145,13 +181,17 @@ class GreetingManager:
 
     def _advance_after_playback(self) -> None:
         if self._phase == _PHASE_GREETING:
-            if not self._advance_greeting():
+            if self._state.get_interaction_mode() == "user_specific_dialog":
+                # Mode B: exactly one greeting per PLAY_GREETINGS visit
+                # -- hand off to that same user's dialog now, rather
+                # than playing the next queued user's greeting here.
+                self._phase = None
+                self._bus.publish("ALL_GREETINGS_FINISHED", {})
+            elif not self._advance_greeting():
                 self._phase = None
                 self._bus.publish("ALL_GREETINGS_FINISHED", {})
         elif self._phase == _PHASE_USER_DIALOG:
-            if not self._advance_user_dialog():
-                self._phase = None
-                self._bus.publish("USER_DIALOGS_FINISHED", {})
+            self._finish_user_dialog_phase()
         elif self._phase == _PHASE_COMMON_DIALOG:
             self._phase = None
             self._bus.publish("COMMON_DIALOG_FINISHED", {})
@@ -180,6 +220,9 @@ class GreetingManager:
 
     def _start_greetings(self) -> None:
         self._play_index = 0
+        self._play_current_greeting()
+
+    def _play_current_greeting(self) -> None:
         self._phase = _PHASE_GREETING
         if not self._advance_greeting():
             self._phase = None
@@ -191,6 +234,12 @@ class GreetingManager:
             self._play_index += 1
             path = AUDIO_ROOT / user.preferred_language / "greetings" / f"{user.user_id}.wav"
             if self._try_play(path):
+                # Per HEAD_MOTION_SPECIFICATION_V3.md: one nod sequence
+                # per greeting, starting together with the greeting
+                # audio. greet_nod() runs on its own thread and does
+                # not block this one.
+                if self._head_motion is not None:
+                    self._head_motion.greet_nod()
                 return True
             logger.error("Missing or unplayable greeting audio for %s: %s", user.user_id, path)
         return False
@@ -198,21 +247,32 @@ class GreetingManager:
     # -- Mode B: per-user dialogs --------------------------------------------
 
     def _start_user_dialogs(self) -> None:
-        self._play_index = 0
+        """Play the dialog for whichever user's greeting just played.
+
+        _play_index already points one past that user -- it was
+        advanced by _advance_greeting() during the PLAY_GREETINGS visit
+        that immediately preceded this one, and Mode B never resets it
+        between phases (each visit to PLAY_GREETINGS/PLAY_USER_DIALOGS
+        here covers exactly one user).
+        """
         self._phase = _PHASE_USER_DIALOG
         if not self._advance_user_dialog():
-            self._phase = None
-            self._bus.publish("USER_DIALOGS_FINISHED", {})
+            self._finish_user_dialog_phase()
 
     def _advance_user_dialog(self) -> bool:
-        while self._play_index < len(self._queue):
-            user = self._queue[self._play_index]
-            self._play_index += 1
-            path = AUDIO_ROOT / user.preferred_language / "dialogs" / f"{user.user_id}.wav"
-            if self._try_play(path):
-                return True
-            logger.error("Missing or unplayable dialog audio for %s: %s", user.user_id, path)
+        if not (0 < self._play_index <= len(self._queue)):
+            return False
+        user = self._queue[self._play_index - 1]
+        path = AUDIO_ROOT / user.preferred_language / "dialogs" / f"{user.user_id}.wav"
+        if self._try_play(path):
+            return True
+        logger.error("Missing or unplayable dialog audio for %s: %s", user.user_id, path)
         return False
+
+    def _finish_user_dialog_phase(self) -> None:
+        self._phase = None
+        more_users_remaining = self._play_index < len(self._queue)
+        self._bus.publish("USER_DIALOGS_FINISHED", {"more_users_remaining": more_users_remaining})
 
     # -- Mode A: common dialog -----------------------------------------------
 

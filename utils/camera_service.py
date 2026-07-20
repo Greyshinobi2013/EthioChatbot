@@ -21,11 +21,21 @@ camera_service, which was already the recognized place for this
 decision (it needs the frame loop's up-to-date detected/tracked state
 either way), just adapted to STATE_MACHINE_V3.md's 10 states/events
 instead of the old 14-state machine.
+
+Per HEAD_MOTION_SPECIFICATION_V3.md's yaw face-tracking requirement,
+this service is also the sole source of live face-position data for
+utils/head_motion_controller.py: every processed frame it picks the
+face the yaw servo should aim at (highest-priority recognized user, or
+the closest face if none are recognized yet) and calls track_face()
+with its normalized horizontal offset. head_motion_controller.py
+itself decides -- via its own STATE_CHANGED subscription -- whether
+that call should actually move the servo (e.g. it is ignored while a
+surveillance scan is active).
 """
 from __future__ import annotations
 
 import threading
-from typing import Optional
+from typing import Dict, List, Optional
 
 import cv2
 import numpy as np
@@ -34,6 +44,7 @@ from utils.event_bus import Event, EventBus
 from utils.face_presence_manager import FacePresenceManager
 from utils.face_recognition import FaceRecognizer, RecognitionOutcome, TrackedFace
 from utils.fsm import FACE_DETECTED, FACE_DETECTION_MODE, MONITORING
+from utils.head_motion_controller import HeadMotionController
 from utils.logger import get_logger
 from utils.state_manager import StateManager
 
@@ -70,6 +81,7 @@ class CameraService:
         camera_width: int = DEFAULT_CAMERA_WIDTH,
         camera_height: int = DEFAULT_CAMERA_HEIGHT,
         recognition_interval: int = DEFAULT_RECOGNITION_INTERVAL,
+        head_motion: Optional[HeadMotionController] = None,
     ) -> None:
         """Args:
             event_bus: Bus to publish FACE_DETECTED/NO_FACE_FOUND/
@@ -85,6 +97,11 @@ class CameraService:
             recognition_interval: Run full recognition on already-tracked
                 faces every Nth processed frame; brand-new tracks are
                 always recognized immediately regardless of this interval.
+            head_motion: Controller fed a normalized horizontal face
+                offset every processed frame via track_face(), per
+                HEAD_MOTION_SPECIFICATION_V3.md's yaw face-tracking
+                requirement. Optional so this service remains usable
+                without head-motion hardware wired up.
         """
         self._bus = event_bus
         self._state = state_manager
@@ -94,6 +111,7 @@ class CameraService:
         self._camera_width = camera_width
         self._camera_height = camera_height
         self._recognition_interval = max(1, recognition_interval)
+        self._head_motion = head_motion
 
         self._capture: Optional[cv2.VideoCapture] = None
         self._thread: Optional[threading.Thread] = None
@@ -103,6 +121,11 @@ class CameraService:
 
         self._frame_lock = threading.Lock()
         self._latest_frame: Optional[np.ndarray] = None
+
+        # track_id -> priority, populated from recognition matches, so
+        # yaw tracking can prefer the highest-priority visible user
+        # (Rule 21) without needing to re-run recognition every frame.
+        self._track_priorities: Dict[int, int] = {}
 
     def start(self) -> None:
         """Open the camera and start the capture loop on a background thread.
@@ -230,6 +253,9 @@ class CameraService:
             self._bus.publish("NO_FACE_FOUND", {})
         self._had_face_last_frame = has_face
 
+        if self._head_motion is not None:
+            self._head_motion.track_face(self._select_tracking_offset(tracked_faces))
+
         if not has_face:
             return
 
@@ -242,11 +268,45 @@ class CameraService:
             outcome = self._recognizer.recognize(frame_bgr, due_faces)
             self._handle_recognition(outcome)
 
+    def _select_tracking_offset(self, tracked_faces: List[TrackedFace]) -> Optional[float]:
+        """Pick which visible face the yaw servo should aim at.
+
+        Per DEVELOPMENT_RULES_V3.md Rule 21: prefer the highest-priority
+        recognized visible user (lowest priority number); if no visible
+        face has a known priority yet (not recognized this session, or
+        recognition hasn't run for it yet), fall back to the closest
+        (largest) face, which Rule 21 explicitly allows.
+
+        Returns:
+            The target face's horizontal offset from frame center,
+            normalized to [-1.0, 1.0] (negative = left), or None if no
+            face is visible.
+        """
+        if not tracked_faces:
+            return None
+
+        def _sort_key(face: TrackedFace):
+            priority = self._track_priorities.get(face.track_id)
+            if priority is not None:
+                return (0, priority)
+            _, _, w, h = face.bbox
+            return (1, -(w * h))
+
+        target = min(tracked_faces, key=_sort_key)
+        x, _, w, _ = target.bbox
+        center_x = x + w / 2.0
+        half_width = self._camera_width / 2.0
+        if half_width <= 0:
+            return 0.0
+        offset = (center_x - half_width) / half_width
+        return max(-1.0, min(1.0, offset))
+
     def _handle_recognition(self, outcome: RecognitionOutcome) -> None:
         recognized_user_ids = []
         newly_arrived_user_ids = []
 
         for match in outcome.matches:
+            self._track_priorities[match.track_id] = match.priority
             is_new = self._presence.record_sighting(match.user_id, match.priority, match.preferred_language)
             recognized_user_ids.append(match.user_id)
             if is_new:

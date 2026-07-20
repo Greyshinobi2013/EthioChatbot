@@ -89,6 +89,22 @@ face_lost_timeout = st.number_input(
     help="Seconds a recognized user may go unseen before FACE_LOST fires for them.",
 )
 
+st.subheader("Servo settings")
+yaw_servo_pin = st.number_input(
+    "Yaw servo GPIO pin",
+    min_value=0,
+    value=config.yaw_servo_pin,
+    step=1,
+    help="GPIO pin the horizontal (yaw) neck servo is wired to.",
+)
+pitch_servo_pin = st.number_input(
+    "Pitch servo GPIO pin",
+    min_value=0,
+    value=config.pitch_servo_pin,
+    step=1,
+    help="GPIO pin the vertical (pitch) neck servo is wired to.",
+)
+
 st.divider()
 if st.button("Save settings", type="primary", icon=":material/save:"):
     updated_config = AppConfig(
@@ -98,6 +114,8 @@ if st.button("Save settings", type="primary", icon=":material/save:"):
         recognition_interval=int(recognition_interval),
         face_confidence=float(face_confidence),
         face_lost_timeout=int(face_lost_timeout),
+        yaw_servo_pin=int(yaw_servo_pin),
+        pitch_servo_pin=int(pitch_servo_pin),
     )
     try:
         save_configuration(updated_config)

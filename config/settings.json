@@ -2,10 +2,9 @@
   "camera_index": 0,
   "camera_width": 640,
   "camera_height": 480,
-
   "recognition_interval": 10,
-
   "face_confidence": 0.38,
-
-  "face_lost_timeout": 5
+  "face_lost_timeout": 5,
+  "yaw_servo_pin": 17,
+  "pitch_servo_pin": 27
 }

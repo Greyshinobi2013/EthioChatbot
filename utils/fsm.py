@@ -8,7 +8,7 @@ rejected and logged if invalid, applied and logged (plus a published
 STATE_CHANGED event) if valid. No other component may set
 StateManager's current_state directly (DEVELOPMENT_RULES_V3.md Rule 19).
 
-Two transitions are not simple (state, event) -> state lookups, per
+Three transitions are not simple (state, event) -> state lookups, per
 STATE_MACHINE_V3.md itself:
 
 - PLAY_GREETINGS + ALL_GREETINGS_FINISHED branches on the configured
@@ -18,6 +18,13 @@ STATE_MACHINE_V3.md itself:
 - PAUSED_DIALOG + RESUME_DIALOG returns to whichever dialog state the
   system was interrupted from. The FSM remembers this as
   ``_paused_from``, set whenever INTERRUPT_DIALOG is applied.
+- PLAY_USER_DIALOGS + USER_DIALOGS_FINISHED branches on the triggering
+  event's own payload (``more_users_remaining``): Mode B processes its
+  queue one user at a time -- greeting+nod, then that same user's
+  dialog, only then the next user's greeting -- by cycling back to
+  PLAY_GREETINGS instead of going to MONITORING once every queued user
+  has been through both states. greeting_manager.py (the only
+  publisher of this event) sets the flag; the FSM only reads it.
 """
 from __future__ import annotations
 
@@ -68,35 +75,31 @@ _TRANSITIONS: Dict[Tuple[str, str], str] = {
     (GREETING_QUEUE, "QUEUE_READY"): PLAY_GREETINGS,
     (PLAY_COMMON_DIALOG, "COMMON_DIALOG_FINISHED"): MONITORING,
     (PLAY_COMMON_DIALOG, "INTERRUPT_DIALOG"): PAUSED_DIALOG,
-    (PLAY_USER_DIALOGS, "USER_DIALOGS_FINISHED"): MONITORING,
     (PLAY_USER_DIALOGS, "INTERRUPT_DIALOG"): PAUSED_DIALOG,
     (MONITORING, "NEW_USER_DETECTED"): FACE_RECOGNIZED,
     (MONITORING, "FACE_LOST"): MONITORING,
     (MONITORING, "ALL_USERS_LOST"): FACE_DETECTION_MODE,
-    # Operator-triggered replay (Dashboard's "Restart Greetings" button),
-    # not part of STATE_MACHINE_V3.md's original event catalog. Reuses
-    # the existing PRIORITY_SORTING entry point rather than inventing a
-    # new state: greeting_manager.py detects this specific trigger event,
-    # stops whatever greeting/dialog audio is currently playing or
-    # paused, and clears greeted flags for currently-active users, so
-    # the normal PRIORITY_SORTING -> GREETING_QUEUE -> PLAY_GREETINGS ->
-    # dialog -> MONITORING pipeline replays for everyone still visible.
-    # Valid from every state where a greeting/dialog session can be
-    # mid-flight (playing or paused), not just MONITORING, so an
-    # operator can restart without waiting for the session to finish.
-    (MONITORING, "RESTART_GREETINGS"): PRIORITY_SORTING,
-    (PLAY_GREETINGS, "RESTART_GREETINGS"): PRIORITY_SORTING,
-    (PLAY_COMMON_DIALOG, "RESTART_GREETINGS"): PRIORITY_SORTING,
-    (PLAY_USER_DIALOGS, "RESTART_GREETINGS"): PRIORITY_SORTING,
-    (PAUSED_DIALOG, "RESTART_GREETINGS"): PRIORITY_SORTING,
+    # Operator-triggered replay (Dashboard's "Restart Greetings" button).
+    # Per STATE_MACHINE_V3.md's MONITORING and PAUSED_DIALOG "Allowed
+    # Events" sections, this is valid from exactly these two states and
+    # goes directly to GREETING_QUEUE (skipping PRIORITY_SORTING as a
+    # distinct FSM state): greeting_manager.py detects this trigger
+    # event on arrival at GREETING_QUEUE, stops whatever dialog audio is
+    # currently playing or paused, clears greeted flags for currently-
+    # active users, and re-sorts them by priority itself before building
+    # the queue, so the normal GREETING_QUEUE -> PLAY_GREETINGS -> dialog
+    # -> MONITORING pipeline replays for everyone still visible.
+    (MONITORING, "RESTART_GREETINGS"): GREETING_QUEUE,
+    (PAUSED_DIALOG, "RESTART_GREETINGS"): GREETING_QUEUE,
 }
 
-# Extra (from_state -> possible next states) entries for the two
+# Extra (from_state -> possible next states) entries for the three
 # conditionally-resolved transitions, unioned into the adjacency map
 # used to validate requested transitions.
 _CONDITIONAL_TARGETS: Dict[str, Set[str]] = {
     PLAY_GREETINGS: {PLAY_COMMON_DIALOG, PLAY_USER_DIALOGS},
     PAUSED_DIALOG: {PLAY_COMMON_DIALOG, PLAY_USER_DIALOGS},
+    PLAY_USER_DIALOGS: {PLAY_GREETINGS, MONITORING},
 }
 
 
@@ -115,6 +118,7 @@ _ALLOWED_NEXT: Dict[str, Set[str]] = _build_allowed_next()
 _SUBSCRIBED_EVENTS: Set[str] = {event_name for (_from_state, event_name) in _TRANSITIONS} | {
     "ALL_GREETINGS_FINISHED",
     "RESUME_DIALOG",
+    "USER_DIALOGS_FINISHED",
 }
 
 
@@ -156,7 +160,7 @@ class FiniteStateMachine:
 
     def _on_event(self, event: Event) -> None:
         """Bus callback: resolve and apply the transition for this event, if any."""
-        target_state = self._resolve(event.name)
+        target_state = self._resolve(event)
         if target_state is None:
             logger.debug(
                 "Event %s ignored: no transition defined from state %s",
@@ -176,8 +180,10 @@ class FiniteStateMachine:
 
         self.request_transition(target_state, event.name)
 
-    def _resolve(self, event_name: str) -> Optional[str]:
-        """Resolve event_name against the current state, handling the two conditional branches."""
+    def _resolve(self, event: Event) -> Optional[str]:
+        """Resolve event against the current state, handling the three conditional branches."""
+        event_name = event.name
+
         if event_name == "ALL_GREETINGS_FINISHED":
             if self.current_state != PLAY_GREETINGS:
                 return None
@@ -188,6 +194,11 @@ class FiniteStateMachine:
             if self.current_state != PAUSED_DIALOG:
                 return None
             return self._paused_from or PLAY_COMMON_DIALOG
+
+        if event_name == "USER_DIALOGS_FINISHED":
+            if self.current_state != PLAY_USER_DIALOGS:
+                return None
+            return PLAY_GREETINGS if event.payload.get("more_users_remaining") else MONITORING
 
         return _TRANSITIONS.get((self.current_state, event_name))
 

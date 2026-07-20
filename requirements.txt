@@ -5,3 +5,4 @@ pygame==2.6.1
 mediapipe==0.10.35
 insightface==1.0.1
 onnxruntime==1.27.0
+gpiozero==2.0.1

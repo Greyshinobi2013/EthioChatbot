@@ -51,6 +51,11 @@ class StateManager:
         self._detected_users: List[str] = []
         self._active_users: Dict[str, ActiveUser] = {}
         self._greeting_queue: List[str] = []
+        self._head_motion_status: Dict[str, object] = {
+            "yaw_angle": None,
+            "pitch_angle": None,
+            "servo_status": "idle",
+        }
 
     # -- FSM state -----------------------------------------------------
 
@@ -171,6 +176,23 @@ class StateManager:
         with self._lock:
             return dict(self._playback_status)
 
+    # -- Head motion status (for dashboard display) -----------------------
+
+    def set_head_motion_status(self, status: Dict[str, object]) -> None:
+        """Record the latest HeadMotionController status snapshot, as a plain dict.
+
+        Attributes expected: "yaw_angle", "pitch_angle" (degrees, or
+        None before the first move) and "servo_status" (e.g. "ok",
+        "simulated", "error").
+        """
+        with self._lock:
+            self._head_motion_status = dict(status)
+
+    def get_head_motion_status(self) -> Dict[str, object]:
+        """The most recently recorded head motion status snapshot."""
+        with self._lock:
+            return dict(self._head_motion_status)
+
     # -- Interaction mode ---------------------------------------------------
 
     def set_interaction_mode(self, mode: str) -> None:
@@ -204,4 +226,5 @@ class StateManager:
                     for user_id, user in self._active_users.items()
                 },
                 "greeting_queue": list(self._greeting_queue),
+                "head_motion_status": dict(self._head_motion_status),
             }
